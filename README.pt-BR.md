@@ -18,11 +18,11 @@ mas nenhum dos dois é obrigatório.
 ## Instalação
 
 ```bash
-pip install git+https://github.com/StrategicProjects/pyforesight
+pip install pyforesight
 ```
 
-Python 3.9 ou mais novo. A instalação pelo repositório compila o código Rust
-e precisa do Rust (<https://rustup.rs>).
+Python 3.9 ou mais novo. Há wheels prontos para Linux, macOS e Windows; o
+pacote é importado como `foresight`. DOI: <https://doi.org/10.5281/zenodo.23050402>.
 
 ## Uso
 

@@ -244,6 +244,8 @@
         <h1>Forecasts chosen by <span class="grad">what would have worked</span>.</h1>
         <p class="lead">A forecasting package that replays the past before trusting a model: rolling-origin backtest, choice by out-of-sample error, and intervals taken from the errors actually observed. The Rust crate <code>foresight</code> inside: fast, on all cores, with no runtime dependencies.</p>
         <div class="badges">
+          <a href="https://pypi.org/project/pyforesight/"><img alt="PyPI" src="https://img.shields.io/pypi/v/pyforesight.svg"></a>
+          <a href="https://doi.org/10.5281/zenodo.23050402"><img alt="DOI" src="https://zenodo.org/badge/DOI/10.5281/zenodo.23050402.svg"></a>
           <a href="https://github.com/StrategicProjects/pyforesight/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/StrategicProjects/pyforesight/actions/workflows/ci.yml/badge.svg"></a>
           <a href="https://github.com/StrategicProjects/pyforesight/blob/main/LICENSE"><img alt="License MIT" src="https://img.shields.io/badge/license-MIT-blue.svg"></a>
           <img alt="No dependencies" src="https://img.shields.io/badge/dependencies-none-brightgreen.svg">
@@ -336,9 +338,9 @@ seasonal_naive         MAPE 11.45%</code></pre>
   <section id="install" class="alt">
     <div class="wrap">
       <h2>Install &amp; run</h2>
-      <p class="sub">Install, describe the series, run the backtest. Python 3.9 or later; installing from the repository compiles the Rust code and needs a Rust toolchain.</p>
+      <p class="sub">Install, describe the series, run the backtest. Python 3.9 or later; wheels for Linux, macOS and Windows, imported as <code>foresight</code>.</p>
       <div class="panel" style="margin-bottom:18px">
-<pre><code><span class="c-prompt">$</span> <span class="c-cmd">pip</span> install git+https://github.com/StrategicProjects/pyforesight</code></pre>
+<pre><code><span class="c-prompt">$</span> <span class="c-cmd">pip</span> install pyforesight</code></pre>
       </div>
       <div class="grid f2">
         <div>

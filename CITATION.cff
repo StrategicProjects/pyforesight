@@ -3,6 +3,7 @@ message: "If you use this package, please cite it as below."
 title: "pyforesight: time series forecasting that picks its model by what would have worked"
 type: software
 license: MIT
+doi: 10.5281/zenodo.23050402
 repository-code: "https://github.com/StrategicProjects/pyforesight"
 url: "https://strategicprojects.github.io/pyforesight/"
 authors:

@@ -1,5 +1,7 @@
 # pyforesight
 
+[![PyPI](https://img.shields.io/pypi/v/pyforesight.svg)](https://pypi.org/project/pyforesight/)
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.23050402.svg)](https://doi.org/10.5281/zenodo.23050402)
 [![CI](https://github.com/StrategicProjects/pyforesight/actions/workflows/ci.yml/badge.svg)](https://github.com/StrategicProjects/pyforesight/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Dependencies: none](https://img.shields.io/badge/dependencies-none-brightgreen.svg)](pyproject.toml)
@@ -24,11 +26,13 @@ on request, but neither is required.
 ## Install
 
 ```bash
-pip install git+https://github.com/StrategicProjects/pyforesight
+pip install pyforesight
 ```
 
-Python 3.9 or later. Installing from the repository compiles the Rust code,
-so it needs a Rust toolchain (<https://rustup.rs>).
+Python 3.9 or later. Wheels are ready for Linux (x86-64 and aarch64), macOS
+(Intel and Apple silicon) and Windows; elsewhere pip compiles the Rust code,
+which needs a Rust toolchain (<https://rustup.rs>). The package is imported
+as `foresight`.
 
 ## Use
 
@@ -134,6 +138,11 @@ pytest                 # about 30 s; pytest -m "not slow" skips TBATS and the th
 `tests/data` has two public series: the monthly ICMS and FPE revenue of the
 state of Piauí, Brazil (Siconfi/STN, with the IPCA price index from the
 Central Bank of Brazil), and the airline passengers of Box & Jenkins.
+
+## Citation
+
+Zenodo: <https://doi.org/10.5281/zenodo.23050402> (all versions); see also
+[CITATION.cff](CITATION.cff).
 
 ## Authors
 
