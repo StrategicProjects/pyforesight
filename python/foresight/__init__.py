@@ -59,6 +59,7 @@ from ._foresight import (
     mae,
     mape,
     mase,
+    max_threads,
     monthly,
     mstl,
     ndiffs,
@@ -67,6 +68,7 @@ from ._foresight import (
     quarterly,
     rmse,
     seasonal_strength,
+    set_max_threads,
     stl,
     thorough,
 )
@@ -115,6 +117,7 @@ __all__ = [
     "mae",
     "mape",
     "mase",
+    "max_threads",
     "monthly",
     "mstl",
     "ndiffs",
@@ -123,6 +126,7 @@ __all__ = [
     "quarterly",
     "rmse",
     "seasonal_strength",
+    "set_max_threads",
     "stl",
     "thorough",
 ]

@@ -95,3 +95,114 @@ def test_accuracy():
     assert fs.inv_box_cox(fs.box_cox([1.0, 2.0], 0.3), 0.3) == pytest.approx([1.0, 2.0])
     with pytest.raises(ValueError):
         fs.mape([1, 2], [1])
+
+
+# ---- what a review found (0.1.1)
+
+def test_fit_can_cross_threads():
+    from concurrent.futures import ThreadPoolExecutor
+
+    y = fs.monthly(sales())
+    with ThreadPoolExecutor(2) as pool:
+        fits = list(pool.map(lambda _: fs.Theta().fit(y), range(4)))
+    want = fs.Theta().fit(y).forecast(3)
+    assert all(f.forecast(3) == want for f in fits)
+    assert repr(fits[0]) == "<Fit theta>"
+
+
+def test_regressors_must_reach_the_horizon():
+    y = fs.monthly(sales())
+    x = fs.Regressors({"x": [math.sin(t * 0.7) for t in range(96)]})  # no future rows
+    model = fs.Arima((1, 0, 0), regressors=x)
+    with pytest.raises(ValueError):
+        model.forecast(y, 3)
+    with pytest.raises(ValueError):
+        fs.log(model).forecast(y, 3)
+    with pytest.raises(ValueError, match="regressors"):
+        model.fit(y).forecast(3)
+    with pytest.warns(UserWarning, match="arima_100_x"):
+        r = fs.backtest(y, [model, fs.Naive()], origins=12, horizon=6)
+    assert r.dropped == ["arima_100_x"] and r.best.name == "naive"
+    assert all(math.isfinite(p.mean) for p in r.best.forecast)
+    with pytest.raises(ValueError, match="differ in length"):
+        fs.Regressors({"a": [1.0, 2.0], "b": [1.0]})
+
+
+def test_backtest_says_what_is_wrong():
+    y = fs.monthly(sales())
+    for levels in ([80], [-0.5], [float("nan")], [0.8, 1.0]):
+        with pytest.raises(ValueError, match="levels"):
+            fs.backtest(y, levels=levels)
+    with pytest.raises(ValueError, match="horizon"):
+        fs.backtest(y, horizon=0)
+    with pytest.raises(ValueError, match="too short"):
+        fs.backtest(y, origins=6)
+    with pytest.raises(ValueError, match="not finite"):
+        fs.backtest([1.0, None] * 40, period=12)
+    negative = fs.monthly([-v for v in sales()])
+    with pytest.warns(UserWarning, match="holt_winters"):
+        r = fs.backtest(negative, [fs.Naive(), fs.HoltWinters()])
+    assert r.dropped == ["holt_winters"]
+    for p in r.best.forecast:
+        lo, hi = p.interval(0.8)
+        assert lo <= hi
+    with pytest.raises(ValueError, match="no candidate"):
+        fs.backtest(negative, [fs.HoltWinters()])
+
+
+def test_a_series_brings_its_period():
+    v = sales()
+    v[41] = None
+    monthly = fs.monthly(v)
+    assert fs.interpolate(monthly) == fs.interpolate(v, 12)
+    assert fs.interpolate(monthly) != fs.interpolate(v)
+    assert fs.clean(monthly) == fs.clean(v, 12)
+    whole = fs.monthly(sales(), first_month=3)
+    again = fs.Series(whole)
+    assert (again.period, again.first_season) == (12, 3)
+    assert fs.stl(whole).periods == [12]
+    assert fs.seasonal_strength(whole) == fs.seasonal_strength(sales(), 12)
+    with pytest.raises(ValueError, match="contradicts"):
+        fs.stl(whole, 4)
+
+
+def test_sizes_within_reason():
+    y = fs.monthly(sales())
+    for call in (
+        lambda: fs.Naive().forecast(y, 2**62),
+        lambda: fs.Naive().fit(y).forecast(2**62),
+        lambda: fs.acf(sales(), 2**62),
+        lambda: fs.Regressors.fourier(12, 1, 2**62),
+        lambda: fs.Arima((60, 0, 0)),
+        lambda: fs.AutoArima(d=99),
+    ):
+        with pytest.raises(ValueError, match="at most"):
+            call()
+
+
+def test_threads_can_be_limited():
+    y = fs.monthly(sales())
+    free = fs.backtest(y)
+    assert fs.max_threads() >= 1
+    fs.set_max_threads(1)
+    try:
+        assert fs.max_threads() == 1
+        one = fs.backtest(y)
+    finally:
+        fs.set_max_threads(0)
+    assert [c.score for c in one] == [c.score for c in free]
+    assert "theta" in free and "nothing" not in free
+
+
+def test_exact_series():
+    assert fs.AutoArima().forecast([5.0] * 60, 2, period=12) == pytest.approx([5.0, 5.0])
+    assert fs.outliers([3.0] * 40) == []
+    fit = fs.Tbats().fit([7.0] * 60, period=12)
+    assert fit.log_likelihood is None and "minus_two_log_likelihood" in fit.details
+    short = fs.Prophet().forecast([52.0, 57.0, 51.0, 59.0, 55.0, 53.0, 58.0, 54.0], 6, period=12)
+    assert all(30 < v < 90 for v in short)
+    pd = pytest.importorskip("pandas")
+    r = fs.backtest(fs.monthly(sales()), [fs.Naive()], levels=[0.8, 0.995], combine=0)
+    assert list(r.best.to_pandas().columns) == [
+        "horizon", "mean", "lower_80", "upper_80", "lower_99.5", "upper_99.5",
+    ]

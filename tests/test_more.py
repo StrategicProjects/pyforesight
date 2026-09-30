@@ -138,7 +138,7 @@ def test_tbats(series, name):
         assert (d["damping"] is not None and d["damping"] < 1) == w["damped"]
         assert (d["lambda"] is not None) == w["box_cox"]
         assert list(d["arma"]) == w["arma"]
-        near(fit.log_likelihood, w["likelihood"], 1e-6, key)
+        near(d["minus_two_log_likelihood"], w["likelihood"], 1e-6, key)
         near(fit.aic, w["aic"], 1e-6, key)
         near(fit.forecast(12), w["forecast"], 5e-3, key)
 

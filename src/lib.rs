@@ -32,9 +32,21 @@ struct Series {
 #[pymethods]
 impl Series {
     #[new]
-    #[pyo3(signature = (values, period = 1, first_season = 1))]
-    fn new(values: &Bound<'_, PyAny>, period: usize, first_season: usize) -> PyResult<Self> {
-        let period = period.max(1);
+    #[pyo3(signature = (values, period = None, first_season = None))]
+    fn new(
+        values: &Bound<'_, PyAny>,
+        period: Option<usize>,
+        first_season: Option<usize>,
+    ) -> PyResult<Self> {
+        // another Series keeps its period and season unless told otherwise
+        let given = values.cast::<Series>().ok().map(|s| {
+            let s = s.get();
+            (s.period, s.phase + 1)
+        });
+        let period = within("period", period.or(given.map(|g| g.0)).unwrap_or(1), MOST)?.max(1);
+        let first_season = first_season
+            .or(given.filter(|g| g.0 == period).map(|g| g.1))
+            .unwrap_or(1);
         if first_season == 0 || first_season > period {
             return Err(PyValueError::new_err(format!(
                 "first_season must be between 1 and the period ({period})"
@@ -81,14 +93,14 @@ impl Series {
 #[pyfunction]
 #[pyo3(signature = (values, first_month = 1))]
 fn monthly(values: &Bound<'_, PyAny>, first_month: usize) -> PyResult<Series> {
-    Series::new(values, 12, first_month)
+    Series::new(values, Some(12), Some(first_month))
 }
 
 /// Quarterly data with a yearly cycle; ``first_quarter`` is 1 for Q1.
 #[pyfunction]
 #[pyo3(signature = (values, first_quarter = 1))]
 fn quarterly(values: &Bound<'_, PyAny>, first_quarter: usize) -> PyResult<Series> {
-    Series::new(values, 4, first_quarter)
+    Series::new(values, Some(4), Some(first_quarter))
 }
 
 /// Numbers from any iterable (list, tuple, NumPy array, pandas Series);
@@ -145,9 +157,22 @@ fn owned(y: &Bound<'_, PyAny>, period: Option<usize>) -> PyResult<Owned> {
     }
     Ok(Owned {
         values: floats(y)?,
-        period: period.unwrap_or(1).max(1),
+        period: within("period", period.unwrap_or(1), MOST)?.max(1),
         phase: 0,
     })
+}
+
+/// Sizes that drive allocations or loops are kept within reason: a larger
+/// number is a mistake, and would exhaust memory or never return.
+const MOST: usize = 1_000_000;
+
+fn within(what: &str, value: usize, most: usize) -> PyResult<usize> {
+    if value > most {
+        return Err(PyValueError::new_err(format!(
+            "{what} must be at most {most}, got {value}"
+        )));
+    }
+    Ok(value)
 }
 
 fn unfit(what: &str) -> PyErr {
@@ -173,6 +198,11 @@ impl fs::Model for Shared {
 
     fn fit(&self, y: fs::Series<'_>) -> Option<Box<dyn fs::Fitted>> {
         self.0.fit(y)
+    }
+
+    // the model's own checks (regressors that reach the horizon) still apply
+    fn forecast(&self, y: fs::Series<'_>, h: usize) -> Option<Vec<f64>> {
+        self.0.forecast(y, h)
     }
 }
 
@@ -274,13 +304,14 @@ impl Model {
     #[pyo3(signature = (y, period = None))]
     fn fit(&self, py: Python<'_>, y: &Bound<'_, PyAny>, period: Option<usize>) -> PyResult<Fit> {
         let y = owned(y, period)?;
-        let estimate = match &self.rich {
-            // estimates of these models can be sent between threads: the GIL
-            // is released while they run, which may take seconds
-            Some(rich) => py.detach(|| rich.estimate(&y)).map(Estimate::Rich),
-            None => self.inner.fit(y.view()).map(Estimate::Plain),
-        }
-        .ok_or_else(|| unfit(&self.name))?;
+        // the GIL is released while the model is estimated, which may take
+        // seconds
+        let estimate = py
+            .detach(|| match &self.rich {
+                Some(rich) => rich.estimate(&y).map(Estimate::Rich),
+                None => self.inner.fit(y.view()).map(Estimate::Plain),
+            })
+            .ok_or_else(|| unfit(&self.name))?;
         Ok(Fit {
             model: self.name.clone(),
             estimate,
@@ -297,6 +328,7 @@ impl Model {
         period: Option<usize>,
     ) -> PyResult<Vec<f64>> {
         let y = owned(y, period)?;
+        let h = within("h", h, MOST)?;
         py.detach(|| self.inner.forecast(y.view(), h))
             .ok_or_else(|| unfit(&self.name))
     }
@@ -394,7 +426,9 @@ impl HoltWinters {
 
 /// Regression of the log on a trend and seasonal dummies; optionally on the
 /// last ``window`` observations only and deflated by a price index
-/// (``deflator``, one value per period of the series and of the horizon).
+/// (``deflator``, one value per period from the first observation on; the
+/// future is not read: forecasts are inflated back at the index's growth over
+/// the last cycle).
 #[pyclass(extends = Model, frozen, module = "foresight")]
 struct LogLinear;
 
@@ -435,19 +469,29 @@ fn arima(
     seasonal: Option<(usize, usize, usize)>,
     constant: Option<bool>,
     regressors: Option<&Regressors>,
-) -> Model {
+) -> PyResult<Model> {
     let (sp, sd, sq) = order3(seasonal);
+    for (what, value, most) in [
+        ("p", order.0, 50),
+        ("d", order.1, 5),
+        ("q", order.2, 50),
+        ("P", sp, 50),
+        ("D", sd, 5),
+        ("Q", sq, 50),
+    ] {
+        within(what, value, most)?;
+    }
     let mut a = m::Arima::new(order.0, order.1, order.2).seasonal(sp, sd, sq);
     if let Some(c) = constant {
         a = a.constant(c);
     }
-    match regressors {
+    Ok(match regressors {
         Some(r) => {
             let x = a.with_regressors(r.inner.clone());
             Model::rich(x.clone(), Rich::ArimaX(x))
         }
         None => Model::rich(a, Rich::Arima(a)),
-    }
+    })
 }
 
 #[pymethods]
@@ -459,11 +503,11 @@ impl Arima {
         seasonal: Option<(usize, usize, usize)>,
         constant: Option<bool>,
         regressors: Option<PyRef<'_, Regressors>>,
-    ) -> PyClassInitializer<Self> {
-        init(
-            arima(order, seasonal, constant, regressors.as_deref()),
+    ) -> PyResult<PyClassInitializer<Self>> {
+        Ok(init(
+            arima(order, seasonal, constant, regressors.as_deref())?,
             Arima,
-        )
+        ))
     }
 
     /// ARIMA(0,1,1)(0,1,1), the "airline model": a good default for seasonal
@@ -472,7 +516,7 @@ impl Arima {
     fn airline(py: Python<'_>) -> PyResult<Py<Arima>> {
         Py::new(
             py,
-            init(arima((0, 1, 1), Some((0, 1, 1)), None, None), Arima),
+            init(arima((0, 1, 1), Some((0, 1, 1)), None, None)?, Arima),
         )
     }
 }
@@ -506,9 +550,12 @@ impl AutoArima {
         regressors: Option<PyRef<'_, Regressors>>,
     ) -> PyResult<PyClassInitializer<Self>> {
         let mut a = m::AutoArima::new().criterion(self::criterion(criterion)?);
-        a.d = d;
-        a.seasonal_d = seasonal_d;
+        a.d = d.map(|d| within("d", d, 5)).transpose()?;
+        a.seasonal_d = seasonal_d.map(|d| within("seasonal_d", d, 5)).transpose()?;
         if let Some((p, q, sp, sq)) = max_order {
+            for v in [p, q, sp, sq] {
+                within("max_order", v, 50)?;
+            }
             a = a.max_orders(p, q, sp, sq);
         }
         if let Some(r) = regressors {
@@ -766,10 +813,10 @@ impl Ensemble {
         };
         let mut e = m::Ensemble::new(members.iter().map(|m| m.candidate()).collect()).weighting(w);
         if let Some(n) = origins {
-            e = e.origins(n);
+            e = e.origins(within("origins", n, MOST)?);
         }
         if let Some(h) = horizon {
-            e = e.horizon(h);
+            e = e.horizon(within("horizon", h, MOST)?);
         }
         if let Some(k) = top {
             e = e.top(k);
@@ -871,8 +918,19 @@ impl Regressors {
     fn new(columns: Option<&Bound<'_, PyDict>>) -> PyResult<Self> {
         let mut r = fs::Regressors::new();
         if let Some(c) = columns {
+            let mut rows = None;
             for (name, values) in c.iter() {
-                r = r.with(name.extract::<String>()?, floats(&values)?);
+                let name = name.extract::<String>()?;
+                let values = floats(&values)?;
+                if values.iter().any(|v| !v.is_finite()) {
+                    return Err(PyValueError::new_err(format!(
+                        "regressor {name} has values that are not finite"
+                    )));
+                }
+                if *rows.get_or_insert(values.len()) != values.len() {
+                    return Err(PyValueError::new_err("the regressors differ in length"));
+                }
+                r = r.with(name, values);
             }
         }
         Ok(Regressors { inner: r })
@@ -881,18 +939,28 @@ impl Regressors {
     /// Sine and cosine pairs of the given ``period`` up to ``order``
     /// harmonics, for ``rows`` periods.
     #[staticmethod]
-    fn fourier(period: f64, order: usize, rows: usize) -> Self {
-        Regressors {
-            inner: fs::Regressors::fourier(period, order, rows),
+    fn fourier(period: f64, order: usize, rows: usize) -> PyResult<Self> {
+        if !(period.is_finite() && period > 1.0) {
+            return Err(PyValueError::new_err("period must be above 1"));
         }
+        Ok(Regressors {
+            inner: fs::Regressors::fourier(
+                period,
+                within("order", order, 1000)?,
+                within("rows", rows, 10 * MOST)?,
+            ),
+        })
     }
 
     /// One dummy per season but the first, for ``rows`` periods.
     #[staticmethod]
-    fn seasonal_dummies(period: usize, rows: usize) -> Self {
-        Regressors {
-            inner: fs::Regressors::seasonal_dummies(period, rows),
-        }
+    fn seasonal_dummies(period: usize, rows: usize) -> PyResult<Self> {
+        Ok(Regressors {
+            inner: fs::Regressors::seasonal_dummies(
+                within("period", period, 1000)?,
+                within("rows", rows, 10 * MOST)?,
+            ),
+        })
     }
 
     /// The columns of both.
@@ -950,8 +1018,9 @@ impl Estimate {
     }
 }
 
-/// A model estimated on a series.
-#[pyclass(unsendable, module = "foresight")]
+/// A model estimated on a series. It is plain data: it can be kept and used
+/// from any thread.
+#[pyclass(frozen, module = "foresight")]
 struct Fit {
     model: String,
     estimate: Estimate,
@@ -974,8 +1043,18 @@ impl Fit {
     }
 
     /// Point forecasts for the ``h`` periods after the last observation.
-    fn forecast(&self, h: usize) -> Vec<f64> {
-        self.estimate.fitted().forecast(h)
+    /// ``ValueError`` when they are not finite: regressors that do not reach
+    /// the horizon, for instance.
+    fn forecast(&self, h: usize) -> PyResult<Vec<f64>> {
+        let forecast = self.estimate.fitted().forecast(within("h", h, MOST)?);
+        if forecast.iter().any(|v| !v.is_finite()) {
+            return Err(PyValueError::new_err(format!(
+                "{}: the forecast is not finite {h} periods ahead; regressors must cover the \
+                 series and the horizon",
+                self.model
+            )));
+        }
+        Ok(forecast)
     }
 
     /// Estimated parameters by name.
@@ -984,12 +1063,13 @@ impl Fit {
         params_dict(py, &self.estimate.fitted().params())
     }
 
+    /// Log-likelihood, for ARIMA and ETS.
     #[getter]
     fn log_likelihood(&self) -> Option<f64> {
         match &self.estimate {
             Estimate::Rich(RichFit::Arima(f)) => Some(f.log_likelihood),
             Estimate::Rich(RichFit::Ets(f)) => Some(f.log_likelihood),
-            Estimate::Rich(RichFit::Tbats(f)) => Some(f.likelihood()),
+            // TBATS reports −2 log-likelihood up to a constant: see details
             _ => None,
         }
     }
@@ -1035,8 +1115,10 @@ impl Fit {
 
     /// What was chosen and estimated, beyond :attr:`params`: orders and
     /// coefficients for ARIMA, the code and smoothing for ETS, changepoints
-    /// and event effects for Prophet, the structure for TBATS. Empty for the
-    /// other models.
+    /// (positions from 0 at the first observation) and event effects for
+    /// Prophet, the structure for TBATS and ``minus_two_log_likelihood`` (up
+    /// to a constant; the lower the better, as its AIC). Empty for the other
+    /// models.
     #[getter]
     fn details<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
         let d = PyDict::new(py);
@@ -1078,6 +1160,7 @@ impl Fit {
                 d.set_item("damping", f.trend())?;
                 d.set_item("arma", f.arma())?;
                 d.set_item("smoothing", f.smoothing())?;
+                d.set_item("minus_two_log_likelihood", f.likelihood())?;
             }
         }
         Ok(d)
@@ -1086,6 +1169,12 @@ impl Fit {
     fn __repr__(&self) -> String {
         format!("<Fit {}>", self.model)
     }
+}
+
+/// A level as a percentage for column names: 0.8 is "80", 0.995 is "99.5".
+fn percent(level: f64) -> String {
+    let text = format!("{:.4}", level * 100.0);
+    text.trim_end_matches('0').trim_end_matches('.').to_string()
 }
 
 /// A pandas DataFrame from columns in order; pandas is imported only here.
@@ -1140,7 +1229,7 @@ impl Point {
             .inner
             .intervals
             .iter()
-            .map(|i| format!("{:.0}%: {:.6}–{:.6}", i.level * 100.0, i.lower, i.upper))
+            .map(|i| format!("{}%: {:.6}–{:.6}", percent(i.level), i.lower, i.upper))
             .collect();
         format!(
             "Point(h={}, mean={:.6}, {})",
@@ -1253,7 +1342,7 @@ impl Candidate {
         d.set_item("mean", f.iter().map(|p| p.mean).collect::<Vec<_>>())?;
         if let Some(first) = f.first() {
             for (j, i) in first.intervals.iter().enumerate() {
-                let pct = (i.level * 100.0).round() as i64;
+                let pct = percent(i.level);
                 d.set_item(
                     format!("lower_{pct}"),
                     f.iter().map(|p| p.intervals[j].lower).collect::<Vec<_>>(),
@@ -1285,11 +1374,13 @@ struct Report {
     first_origin: usize,
     horizon: usize,
     metric: String,
+    dropped: Vec<String>,
 }
 
 #[pymethods]
 impl Report {
-    /// The models in the order given, then the average of the best ones.
+    /// The models that went through the whole backtest, in the order given,
+    /// then the average of the best ones.
     #[getter]
     fn candidates(&self, py: Python<'_>) -> Vec<Py<Candidate>> {
         self.candidates.iter().map(|c| c.clone_ref(py)).collect()
@@ -1313,7 +1404,15 @@ impl Report {
         self.origins
     }
 
-    /// Position in the series of the first period forecast in the backtest.
+    /// Names of the candidates left out: they could not forecast at some
+    /// origin or from the whole series.
+    #[getter]
+    fn dropped(&self) -> Vec<String> {
+        self.dropped.clone()
+    }
+
+    /// Position in the series, counting from 0, of the first period forecast
+    /// in the backtest.
     #[getter]
     fn first_origin(&self) -> usize {
         self.first_origin
@@ -1331,6 +1430,19 @@ impl Report {
 
     fn __len__(&self) -> usize {
         self.candidates.len()
+    }
+
+    fn __iter__<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+        PyList::new(py, self.candidates.iter().map(|c| c.clone_ref(py)))?
+            .into_any()
+            .try_iter()
+            .map(|i| i.into_any())
+    }
+
+    /// Whether a candidate of that name is in the report.
+    fn __contains__(&self, name: &Bound<'_, PyAny>) -> bool {
+        name.extract::<String>()
+            .is_ok_and(|n| self.names.contains(&n))
     }
 
     /// A candidate by name or position.
@@ -1395,7 +1507,10 @@ impl Report {
 /// average ``metric`` (``"mape"``, ``"mae"``, ``"rmse"`` or ``"mase"``),
 /// adds the simple average of the best ``combine``, and forecasts from the
 /// whole series with intervals of the given ``levels`` taken from the
-/// errors observed. ``candidates`` defaults to :func:`defaults`.
+/// errors observed. ``candidates`` defaults to :func:`defaults`. Candidates
+/// that cannot forecast at every origin and from the whole series are left
+/// out, with a warning; see :attr:`Report.dropped`. With ``window``, every
+/// fit uses the last ``window`` observations only.
 #[pyfunction]
 #[pyo3(signature = (
     y, candidates = None, *, period = None, origins = 36, horizon = 12, min_train = 48,
@@ -1435,6 +1550,32 @@ fn backtest(
     if candidates.is_empty() {
         return Err(PyValueError::new_err("no candidates"));
     }
+    if levels.iter().any(|l| !(*l > 0.0 && *l < 1.0)) {
+        return Err(PyValueError::new_err(
+            "levels must be above 0 and below 1, e.g. 0.8 for an 80% interval",
+        ));
+    }
+    if horizon == 0 {
+        return Err(PyValueError::new_err("horizon must be at least 1"));
+    }
+    if window == Some(0) {
+        return Err(PyValueError::new_err("window must be at least 1"));
+    }
+    within("horizon", horizon, MOST)?;
+    if y.values.iter().any(|v| !v.is_finite()) {
+        return Err(PyValueError::new_err(
+            "the series has values that are not finite: fill the gaps first, e.g. with clean()",
+        ));
+    }
+    let usable = origins.min(y.values.len().saturating_sub(min_train));
+    if usable < horizon {
+        return Err(PyValueError::new_err(format!(
+            "the series is too short: {} observations with min_train={min_train} leave {usable} \
+             origins, fewer than the horizon ({horizon}); lower min_train or horizon",
+            y.values.len()
+        )));
+    }
+    let asked: Vec<String> = candidates.iter().map(|c| c.name.clone()).collect();
     let config = fs::Backtest {
         origins,
         horizon,
@@ -1449,10 +1590,24 @@ fn backtest(
         .detach(|| config.run(y.view(), &candidates))
         .ok_or_else(|| {
             PyValueError::new_err(
-                "the series is too short for the backtest (see min_train) or not finite",
+                "no candidate could forecast at every origin and from the whole series",
             )
         })?;
-    let names = report.candidates.iter().map(|c| c.name.clone()).collect();
+    let names: Vec<String> = report.candidates.iter().map(|c| c.name.clone()).collect();
+    let dropped: Vec<String> = asked.into_iter().filter(|n| !names.contains(n)).collect();
+    if !dropped.is_empty() {
+        let message = std::ffi::CString::new(format!(
+            "left out of the backtest (no forecast at some origin or from the whole series): {}",
+            dropped.join(", ")
+        ))
+        .unwrap_or_default();
+        PyErr::warn(
+            py,
+            &py.get_type::<pyo3::exceptions::PyUserWarning>(),
+            &message,
+            1,
+        )?;
+    }
     let mut out = Vec::with_capacity(report.candidates.len());
     for c in report.candidates {
         out.push(Py::new(py, Candidate { inner: c })?);
@@ -1465,7 +1620,22 @@ fn backtest(
         first_origin: report.first_origin,
         horizon: report.horizon,
         metric: format!("{:?}", report.metric).to_lowercase(),
+        dropped,
     })
+}
+
+/// Limits the threads used by backtests and ensembles, in the whole process;
+/// 0, the default, stands for every core. The results do not depend on it.
+#[pyfunction]
+fn set_max_threads(threads: usize) -> PyResult<()> {
+    fs::set_max_threads(within("threads", threads, 4096)?);
+    Ok(())
+}
+
+/// The most threads a backtest or an ensemble will use.
+#[pyfunction]
+fn max_threads() -> usize {
+    fs::max_threads()
 }
 
 // ---------------------------------------------------------------- decomposition
@@ -1539,19 +1709,20 @@ impl Decomposition {
     }
 }
 
-/// STL (Cleveland et al., 1990) for one ``period``. ``seasonal_window`` is
-/// the LOESS window over the cycles (odd, at least 7), or ``None`` for the
-/// same pattern in every cycle. ``degrees`` are the LOESS degrees (0 or 1)
+/// STL (Cleveland et al., 1990) for one ``period`` (that of ``y`` when it is
+/// a :class:`Series`). ``seasonal_window`` is the LOESS window over the cycles
+/// (odd, usually 7 or more; an even number is taken as the next odd one), or
+/// ``None`` for the same pattern in every cycle. ``degrees`` are the LOESS degrees (0 or 1)
 /// of the seasonal, trend and low-pass smoothers.
 #[pyfunction]
 #[pyo3(signature = (
-    y, period, seasonal_window = None, *, trend_window = None, low_pass_window = None,
+    y, period = None, seasonal_window = None, *, trend_window = None, low_pass_window = None,
     degrees = None, robust = false, inner = None, outer = None,
 ))]
 #[allow(clippy::too_many_arguments)]
 fn stl(
     y: &Bound<'_, PyAny>,
-    period: usize,
+    period: Option<usize>,
     seasonal_window: Option<usize>,
     trend_window: Option<usize>,
     low_pass_window: Option<usize>,
@@ -1560,7 +1731,15 @@ fn stl(
     inner: Option<usize>,
     outer: Option<usize>,
 ) -> PyResult<Decomposition> {
-    let values = floats(y)?;
+    let y = owned(y, period)?;
+    let (values, period) = (y.values, y.period);
+    if let Some((a, b, c)) = degrees {
+        if a > 1 || b > 1 || c > 1 {
+            return Err(PyValueError::new_err("degrees must be 0 or 1"));
+        }
+    }
+    let inner = inner.map(|n| within("inner", n, 1000)).transpose()?;
+    let outer = outer.map(|n| within("outer", n, 1000)).transpose()?;
     let window = seasonal_window.map_or(SeasonalWindow::Periodic, SeasonalWindow::Span);
     let mut s = Stl::new(period, window).robust(robust);
     if let Some(n) = trend_window {
@@ -1579,7 +1758,10 @@ fn stl(
     s.decompose(&values)
         .map(|inner| Decomposition { inner })
         .ok_or_else(|| {
-            PyValueError::new_err("STL needs two full cycles of finite values and a valid window")
+            PyValueError::new_err(
+                "STL needs finite values, a period of 2 or more and a series longer than two \
+                 full cycles",
+            )
         })
 }
 
@@ -1600,16 +1782,22 @@ fn mstl(
         s = s.seasonal_windows(&w);
     }
     if let Some(n) = iterations {
-        s = s.iterations(n);
+        s = s.iterations(within("iterations", n, 100)?);
     }
     s.decompose(&values)
         .map(|inner| Decomposition { inner })
-        .ok_or_else(|| PyValueError::new_err("MSTL needs a period that fits twice in the series"))
+        .ok_or_else(|| {
+            PyValueError::new_err(
+                "MSTL needs finite values and a series longer than two cycles of a period",
+            )
+        })
 }
 
 // ---------------------------------------------------------------- cleaning
 
-/// An observation that does not fit with the others.
+/// An observation that does not fit with the others: its ``index`` (from 0
+/// at the first observation), its ``value`` and the ``replacement`` that the
+/// neighbours and the season suggest.
 #[pyclass(frozen, module = "foresight")]
 struct Outlier {
     #[pyo3(get)]
@@ -1632,17 +1820,20 @@ impl Outlier {
 
 /// Gaps (NaN or ``None``) filled, following the season when there is one.
 #[pyfunction]
-#[pyo3(signature = (values, period = 1))]
-fn interpolate(values: &Bound<'_, PyAny>, period: usize) -> PyResult<Vec<f64>> {
-    fs::clean::interpolate(&floats(values)?, period)
+#[pyo3(signature = (values, period = None))]
+fn interpolate(values: &Bound<'_, PyAny>, period: Option<usize>) -> PyResult<Vec<f64>> {
+    let y = owned(values, period)?;
+    fs::clean::interpolate(&y.values, y.period)
         .ok_or_else(|| PyValueError::new_err("nothing to interpolate from"))
 }
 
-/// Observations far from what the trend and the season suggest.
+/// Observations far from what the trend and the season suggest. Their
+/// ``index`` counts from 0 at the first observation.
 #[pyfunction]
-#[pyo3(signature = (values, period = 1))]
-fn outliers(values: &Bound<'_, PyAny>, period: usize) -> PyResult<Vec<Outlier>> {
-    let found = fs::clean::outliers(&floats(values)?, period)
+#[pyo3(signature = (values, period = None))]
+fn outliers(values: &Bound<'_, PyAny>, period: Option<usize>) -> PyResult<Vec<Outlier>> {
+    let y = owned(values, period)?;
+    let found = fs::clean::outliers(&y.values, y.period)
         .ok_or_else(|| PyValueError::new_err("the series is too short"))?;
     Ok(found
         .into_iter()
@@ -1656,9 +1847,10 @@ fn outliers(values: &Bound<'_, PyAny>, period: usize) -> PyResult<Vec<Outlier>> 
 
 /// Gaps filled and outliers replaced.
 #[pyfunction]
-#[pyo3(signature = (values, period = 1))]
-fn clean(values: &Bound<'_, PyAny>, period: usize) -> PyResult<Vec<f64>> {
-    fs::clean::clean(&floats(values)?, period)
+#[pyo3(signature = (values, period = None))]
+fn clean(values: &Bound<'_, PyAny>, period: Option<usize>) -> PyResult<Vec<f64>> {
+    let y = owned(values, period)?;
+    fs::clean::clean(&y.values, y.period)
         .ok_or_else(|| PyValueError::new_err("the series is too short"))
 }
 
@@ -1667,7 +1859,10 @@ fn clean(values: &Bound<'_, PyAny>, period: usize) -> PyResult<Vec<f64>> {
 /// Autocorrelations at lags 1 to ``max_lag``.
 #[pyfunction]
 fn acf(y: &Bound<'_, PyAny>, max_lag: usize) -> PyResult<Vec<f64>> {
-    Ok(fs::diagnostics::acf(&floats(y)?, max_lag))
+    Ok(fs::diagnostics::acf(
+        &floats(y)?,
+        within("max_lag", max_lag, MOST)?,
+    ))
 }
 
 /// Differences at the given ``lag``.
@@ -1688,19 +1883,23 @@ fn kpss(y: &Bound<'_, PyAny>) -> PyResult<Option<f64>> {
 #[pyfunction]
 #[pyo3(signature = (y, max = 2))]
 fn ndiffs(y: &Bound<'_, PyAny>, max: usize) -> PyResult<usize> {
-    Ok(fs::diagnostics::ndiffs(&floats(y)?, max))
+    Ok(fs::diagnostics::ndiffs(&floats(y)?, within("max", max, 5)?))
 }
 
 /// Seasonal differences needed, by the strength of seasonality.
 #[pyfunction]
-fn nsdiffs(y: &Bound<'_, PyAny>, period: usize) -> PyResult<usize> {
-    Ok(fs::diagnostics::nsdiffs(&floats(y)?, period))
+#[pyo3(signature = (y, period = None))]
+fn nsdiffs(y: &Bound<'_, PyAny>, period: Option<usize>) -> PyResult<usize> {
+    let y = owned(y, period)?;
+    Ok(fs::diagnostics::nsdiffs(&y.values, y.period))
 }
 
 /// Strength of seasonality from 0 to 1 (Wang, Smith & Hyndman, 2006).
 #[pyfunction]
-fn seasonal_strength(y: &Bound<'_, PyAny>, period: usize) -> PyResult<Option<f64>> {
-    Ok(fs::diagnostics::seasonal_strength(&floats(y)?, period))
+#[pyo3(signature = (y, period = None))]
+fn seasonal_strength(y: &Bound<'_, PyAny>, period: Option<usize>) -> PyResult<Option<f64>> {
+    let y = owned(y, period)?;
+    Ok(fs::diagnostics::seasonal_strength(&y.values, y.period))
 }
 
 /// Box-Cox transformation with parameter ``lam`` (0 is the log).
@@ -1773,14 +1972,18 @@ fn rmse(actual: &Bound<'_, PyAny>, forecast: &Bound<'_, PyAny>) -> PyResult<Opti
 /// Mean absolute error scaled by the in-sample seasonal naive error of
 /// ``train`` (Hyndman & Koehler, 2006).
 #[pyfunction]
-#[pyo3(signature = (actual, forecast, train, period = 1))]
+#[pyo3(signature = (actual, forecast, train, period = None))]
 fn mase(
     actual: &Bound<'_, PyAny>,
     forecast: &Bound<'_, PyAny>,
     train: &Bound<'_, PyAny>,
-    period: usize,
+    period: Option<usize>,
 ) -> PyResult<Option<f64>> {
     let (a, f) = pair(actual, forecast)?;
+    let period = match train.cast::<Series>() {
+        Ok(s) if period.is_none() => s.get().period,
+        _ => period.unwrap_or(1),
+    };
     Ok(fs::accuracy::mase_scale(&floats(train)?, period)
         .and_then(|scale| fs::accuracy::mase(&a, &f, scale)))
 }
@@ -1790,7 +1993,7 @@ fn mase(
 #[pymodule]
 fn _foresight(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add("__version__", env!("CARGO_PKG_VERSION"))?;
-    m.add("CRATE_VERSION", "0.7.1")?;
+    m.add("CRATE_VERSION", "0.7.2")?;
     m.add_class::<Series>()?;
     m.add_class::<Model>()?;
     m.add_class::<Mean>()?;
@@ -1824,6 +2027,8 @@ fn _foresight(m: &Bound<'_, PyModule>) -> PyResult<()> {
         wrap_pyfunction!(defaults, m)?,
         wrap_pyfunction!(thorough, m)?,
         wrap_pyfunction!(backtest, m)?,
+        wrap_pyfunction!(set_max_threads, m)?,
+        wrap_pyfunction!(max_threads, m)?,
         wrap_pyfunction!(stl, m)?,
         wrap_pyfunction!(mstl, m)?,
         wrap_pyfunction!(interpolate, m)?,

@@ -44,7 +44,7 @@ import foresight as fs
 # monthly data whose first observation is in March
 y = fs.monthly(values, first_month=3)
 
-# replay the last 36 months, 12 months ahead, with every built-in model
+# replay the last 36 months, 12 months ahead, with the 11 default models
 report = fs.backtest(y)
 
 best = report.best
@@ -89,9 +89,22 @@ report = fs.backtest(y, fs.thorough() + [ensemble.named("my_ensemble")])
 ```
 
 Any sequence of numbers works where a series is expected: a list, a NumPy
-array, a pandas Series. Without `fs.Series` (or `fs.monthly`,
-`fs.quarterly`), pass the seasonal period: `fs.Theta().fit(values, period=12)`.
-Missing values (`None`, NaN) are only accepted by the cleaning functions.
+array, a pandas Series. Only the values are read (an index of dates is not),
+so say what the series is with `fs.monthly`, `fs.quarterly` or `fs.Series`, or
+pass the seasonal period: `fs.Theta().fit(values, period=12)`. Missing values
+(`None`, NaN) are only accepted by the cleaning functions.
+
+Good to know:
+
+- Positions count from 0 at the first observation: Prophet's `events` and
+  `steps`, `Outlier.index`, `Report.first_origin` and the changepoints of a
+  fit. Months and quarters (`first_month`, `first_season`) count from 1.
+- A candidate that cannot forecast at every origin and from the whole series
+  is left out of the report, with a warning; `report.dropped` names them.
+- `fs.set_max_threads(n)` limits the threads of backtests and ensembles; the
+  results do not depend on it. The GIL is released while models are fitted.
+- Models, fits and reports hold Rust objects and cannot be pickled or
+  copied; a model is cheap to build again in another process.
 
 ## What is in it
 
@@ -105,7 +118,7 @@ Missing values (`None`, NaN) are only accepted by the cleaning functions.
 | `Ensemble` | average, median, weights by inverse error or stacked weights |
 | `Regressors` | external variables, Fourier terms, seasonal dummies |
 | `defaults`, `thorough` | ready sets of 11 and 18 candidates |
-| `backtest` | rolling origin (expanding or fixed window) on all cores; MAPE, MAE, RMSE, MASE and bias by horizon; average of the best models; choice by out-of-sample error; empirical intervals by horizon and for totals |
+| `backtest`, `set_max_threads` | rolling origin (expanding or fixed window) on all cores, or as many as allowed; MAPE, MAE, RMSE, MASE and bias by horizon; average of the best models; choice by out-of-sample error; empirical intervals by horizon and for totals |
 | `interpolate`, `outliers`, `clean` | gaps filled and outliers found and replaced, with the season taken into account |
 | Measures and tests | `mape`, `bias`, `mae`, `rmse`, `mase`, `acf`, `difference`, `kpss`, `ndiffs`, `nsdiffs`, `seasonal_strength`, `box_cox`, `inv_box_cox`, `guerrero` |
 

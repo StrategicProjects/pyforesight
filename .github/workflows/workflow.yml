@@ -16,6 +16,16 @@ permissions:
   contents: read
 
 jobs:
+  # a tag has to name the version that Cargo.toml declares
+  version:
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          declared=$(grep -m1 '^version' Cargo.toml | cut -d'"' -f2)
+          test "v$declared" = "$GITHUB_REF_NAME" || { echo "tag $GITHUB_REF_NAME, Cargo.toml $declared"; exit 1; }
+
   wheels:
     name: wheel (${{ matrix.os }}, ${{ matrix.target }})
     runs-on: ${{ matrix.os }}
@@ -35,6 +45,17 @@ jobs:
           target: ${{ matrix.target }}
           args: --release --out dist
           manylinux: auto
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Test the wheel
+        # only where the wheel runs on the machine that built it
+        if: (matrix.os == 'ubuntu-latest' && matrix.target == 'x86_64') || (matrix.os == 'macos-latest' && matrix.target == 'aarch64') || matrix.os == 'windows-latest'
+        shell: bash
+        run: |
+          python -m pip install pytest
+          python -m pip install --no-index --find-links dist pyforesight
+          python -m pytest -q -m "not slow"
       - uses: actions/upload-artifact@v4
         with:
           name: wheel-${{ matrix.os }}-${{ matrix.target }}
@@ -55,7 +76,7 @@ jobs:
 
   publish:
     if: startsWith(github.ref, 'refs/tags/v')
-    needs: [wheels, sdist]
+    needs: [version, wheels, sdist]
     runs-on: ubuntu-latest
     environment: pypi
     permissions:

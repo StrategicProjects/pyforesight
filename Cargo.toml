@@ -1,6 +1,6 @@
 [package]
 name = "pyforesight"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
 description = "Python bindings of the foresight forecasting crate"
 license = "MIT"
@@ -12,7 +12,7 @@ name = "_foresight"
 crate-type = ["cdylib"]
 
 [dependencies]
-foresight = "=0.7.1"
+foresight = "=0.7.2"
 pyo3 = { version = "0.29", features = ["abi3-py39"] }
 
 [profile.release]
