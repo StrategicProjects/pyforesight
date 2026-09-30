@@ -1,0 +1,24 @@
+cff-version: 1.2.0
+message: "If you use this package, please cite it as below."
+title: "pyforesight: time series forecasting that picks its model by what would have worked"
+type: software
+license: MIT
+repository-code: "https://github.com/StrategicProjects/pyforesight"
+url: "https://strategicprojects.github.io/pyforesight/"
+authors:
+  - family-names: Leite
+    given-names: André
+    email: leite@castlab.org
+    orcid: "https://orcid.org/0000-0002-4718-9766"
+  - family-names: Wasiliew
+    given-names: Marcos
+    orcid: "https://orcid.org/0009-0004-4694-3159"
+  - family-names: Vasconcelos
+    given-names: Hugo
+    orcid: "https://orcid.org/0000-0001-6249-0920"
+  - family-names: Amorim
+    given-names: Carlos
+    orcid: "https://orcid.org/0000-0001-6315-8305"
+  - family-names: Bezerra
+    given-names: Diogo
+    orcid: "https://orcid.org/0000-0002-1216-8674"

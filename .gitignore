@@ -1,0 +1,8 @@
+/target
+__pycache__/
+*.so
+*.pyd
+.venv/
+dist/
+.pytest_cache/
+CLAUDE.md

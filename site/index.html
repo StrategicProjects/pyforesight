@@ -1,0 +1,520 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>pyforesight — forecasting in Python that picks its model by what would have worked</title>
+<meta name="description" content="A Python package for time series forecasting: rolling-origin backtest, model choice by out-of-sample error and empirical prediction intervals. The Rust crate foresight inside, no runtime dependencies." />
+<meta property="og:title" content="pyforesight — time series forecasting in Python" />
+<meta property="og:description" content="Rolling-origin backtest, choice by out-of-sample error, empirical intervals for each horizon and for totals. Rust inside, no runtime dependencies." />
+<meta property="og:type" content="website" />
+<meta property="og:url" content="https://strategicprojects.github.io/pyforesight/" />
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%94%AD%3C/text%3E%3C/svg%3E" />
+<style>
+  :root {
+    --bg: #0b1020;
+    --bg-soft: #121a33;
+    --card: #16203f;
+    --border: #263457;
+    --fg: #e8edf7;
+    --muted: #9fb0d0;
+    --brand: #7c5cff;
+    --brand-2: #29c7ac;
+    --accent: #ffb14e;
+    --code-bg: #0d1428;
+    --shadow: 0 12px 40px rgba(0,0,0,.35);
+    --radius: 16px;
+    --maxw: 1080px;
+    --series-1: #3987e5;
+    --series-2: #d95926;
+    --grid: #263457;
+    --axis: #34456f;
+  }
+  @media (prefers-color-scheme: light) {
+    :root {
+      --bg: #f6f8fe;
+      --bg-soft: #eef2fb;
+      --card: #ffffff;
+      --border: #dbe3f4;
+      --fg: #10192e;
+      --muted: #56648a;
+      --code-bg: #0d1428;
+      --shadow: 0 12px 36px rgba(30,45,90,.12);
+      --series-1: #2a78d6;
+      --series-2: #eb6834;
+      --grid: #e6ebf7;
+      --axis: #c3cde6;
+    }
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0;
+    font: 16px/1.65 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    color: var(--fg);
+    background:
+      radial-gradient(1100px 600px at 12% -8%, rgba(124,92,255,.20), transparent 60%),
+      radial-gradient(900px 500px at 96% 4%, rgba(41,199,172,.16), transparent 55%),
+      var(--bg);
+    -webkit-font-smoothing: antialiased;
+  }
+  a { color: var(--brand-2); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  .wrap { max-width: var(--maxw); margin: 0 auto; padding: 0 22px; }
+
+  /* Nav */
+  header.nav {
+    position: sticky; top: 0; z-index: 10;
+    backdrop-filter: blur(10px);
+    background: color-mix(in srgb, var(--bg) 78%, transparent);
+    border-bottom: 1px solid var(--border);
+  }
+  .nav-inner { display: flex; align-items: center; justify-content: space-between; height: 62px; }
+  .brand { display: flex; align-items: center; gap: 10px; font-weight: 800; letter-spacing: -.02em; font-size: 1.1rem; }
+  .brand .logo { font-size: 1.35rem; }
+  .nav-links { display: flex; gap: 22px; align-items: center; }
+  .nav-links a { color: var(--muted); font-weight: 600; font-size: .95rem; }
+  .nav-links a:hover { color: var(--fg); text-decoration: none; }
+  .btn {
+    display: inline-flex; align-items: center; gap: 8px;
+    padding: 10px 16px; border-radius: 12px; font-weight: 700; font-size: .95rem;
+    border: 1px solid var(--border); color: var(--fg); background: var(--card);
+    transition: transform .12s ease, box-shadow .12s ease, border-color .12s ease;
+  }
+  .btn:hover { text-decoration: none; transform: translateY(-1px); box-shadow: var(--shadow); }
+  .btn.primary { background: linear-gradient(135deg, var(--brand), #5b73ff); color: #fff; border: none; }
+  @media (max-width: 720px) { .nav-links a.hide-sm { display: none; } }
+
+  /* Hero */
+  .hero { padding: 74px 0 40px; }
+  .eyebrow {
+    display: inline-flex; align-items: center; gap: 8px;
+    font-size: .8rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase;
+    color: var(--brand-2); background: color-mix(in srgb, var(--brand-2) 14%, transparent);
+    border: 1px solid color-mix(in srgb, var(--brand-2) 30%, transparent);
+    padding: 6px 12px; border-radius: 999px;
+  }
+  h1 { font-size: clamp(2.2rem, 5vw, 3.6rem); line-height: 1.05; letter-spacing: -.03em; margin: 18px 0 14px; }
+  h1 .grad { background: linear-gradient(120deg, var(--brand), var(--brand-2)); -webkit-background-clip: text; background-clip: text; color: transparent; }
+  .lead { font-size: 1.18rem; color: var(--muted); max-width: 40ch; }
+  .badges { display: flex; flex-wrap: wrap; gap: 8px; margin: 24px 0 26px; }
+  .badges img { height: 22px; }
+  .cta { display: flex; flex-wrap: wrap; gap: 12px; }
+
+  .hero-grid { display: grid; grid-template-columns: 1.05fr .95fr; gap: 40px; align-items: center; }
+  @media (max-width: 900px) { .hero-grid { grid-template-columns: 1fr; } }
+
+  /* Terminal card */
+  .term {
+    background: var(--code-bg); border: 1px solid var(--border); border-radius: var(--radius);
+    box-shadow: var(--shadow); overflow: hidden;
+  }
+  .term-bar { display: flex; align-items: center; gap: 8px; padding: 12px 14px; border-bottom: 1px solid rgba(255,255,255,.07); }
+  .dot { width: 12px; height: 12px; border-radius: 50%; }
+  .dot.r { background: #ff5f57; } .dot.y { background: #febc2e; } .dot.g { background: #28c840; }
+  .term-title { margin-left: 8px; color: #7f8bb0; font: 600 .82rem ui-monospace, monospace; }
+  pre { margin: 0; padding: 18px 18px 22px; overflow-x: auto; }
+  code, pre { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: .88rem; }
+  pre code { color: #d7e0f5; }
+  .c-prompt { color: #6ee7c8; } .c-flag { color: #ffb14e; } .c-cmd { color: #8ea2ff; } .c-cmt { color: #6b779b; } .c-ok { color: #59d99a; }
+
+  /* Sections */
+  section { padding: 56px 0; }
+  section.alt { background: var(--bg-soft); border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); }
+  h2 { font-size: clamp(1.6rem, 3.4vw, 2.2rem); letter-spacing: -.02em; margin: 0 0 8px; }
+  .sub { color: var(--muted); margin: 0 0 30px; max-width: 62ch; }
+
+  .grid { display: grid; gap: 18px; }
+  .grid > *, .hero-grid > * { min-width: 0; }
+  .grid.f3 { grid-template-columns: repeat(3, 1fr); }
+  .grid.f2 { grid-template-columns: repeat(2, 1fr); }
+  @media (max-width: 860px) { .grid.f3, .grid.f2 { grid-template-columns: 1fr; } }
+  .card {
+    background: var(--card); border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 22px; transition: transform .14s ease, box-shadow .14s ease, border-color .14s ease;
+  }
+  .card:hover { transform: translateY(-3px); box-shadow: var(--shadow); border-color: color-mix(in srgb, var(--brand) 40%, var(--border)); }
+  .card .ic { font-size: 1.5rem; }
+  .card h3 { margin: 12px 0 6px; font-size: 1.1rem; letter-spacing: -.01em; }
+  .card p { margin: 0; color: var(--muted); font-size: .96rem; }
+
+  /* Entity pills */
+  .pills { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 6px; }
+  .pill { font: 600 .82rem ui-monospace, monospace; padding: 6px 11px; border-radius: 999px; background: color-mix(in srgb, var(--brand) 12%, transparent); border: 1px solid color-mix(in srgb, var(--brand) 26%, transparent); color: var(--fg); }
+
+  /* Steps */
+  .steps { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; }
+  @media (max-width: 860px) { .steps { grid-template-columns: 1fr 1fr; } }
+  .step { background: var(--card); border: 1px solid var(--border); border-radius: 14px; padding: 16px; }
+  .step .n { font: 800 .8rem ui-monospace, monospace; color: var(--brand-2); }
+  .step h4 { margin: 6px 0 4px; font-size: 1rem; }
+  .step p { margin: 0; color: var(--muted); font-size: .9rem; }
+
+  /* Install tabs (pure CSS via details) */
+  .panel { background: var(--code-bg); border: 1px solid var(--border); border-radius: var(--radius); padding: 6px; }
+  .note { color: var(--muted); font-size: .9rem; margin-top: 10px; }
+
+  table.lic { width: 100%; border-collapse: collapse; font-size: .94rem; }
+  table.lic th, table.lic td { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--border); }
+  table.lic th { color: var(--muted); font-weight: 700; }
+  .tag { font: 700 .74rem ui-monospace, monospace; padding: 3px 8px; border-radius: 6px; }
+  .tag.mit { background: rgba(41,199,172,.16); color: var(--brand-2); }
+  .tag.mpl { background: rgba(255,177,78,.18); color: var(--accent); }
+  .tag.gpl { background: rgba(255,95,87,.16); color: #ff8a80; }
+
+  .diagram {
+    background: var(--card); border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 22px; box-shadow: var(--shadow); overflow-x: auto;
+  }
+  .diagram img { display: block; width: 100%; max-width: 960px; height: auto; margin: 0 auto; }
+
+  .dl {
+    display: flex; flex-wrap: wrap; align-items: center; gap: 10px;
+    background: var(--card); border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 16px 18px; margin-bottom: 20px;
+  }
+  .dl-lbl { font-weight: 800; letter-spacing: -.01em; margin-right: 6px; }
+  .dl-btn {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 8px 13px; border-radius: 10px; font-weight: 700; font-size: .9rem;
+    color: #fff; background: linear-gradient(135deg, var(--brand), #5b73ff);
+    transition: transform .12s ease, box-shadow .12s ease;
+  }
+  .dl-btn:hover { text-decoration: none; transform: translateY(-1px); box-shadow: var(--shadow); }
+  .dl-all { font-weight: 700; font-size: .9rem; color: var(--brand-2); }
+
+  footer { padding: 40px 0 60px; color: var(--muted); border-top: 1px solid var(--border); }
+  .foot-inner { display: flex; flex-wrap: wrap; gap: 16px; justify-content: space-between; align-items: center; }
+  .foot-links { display: flex; gap: 18px; flex-wrap: wrap; }
+
+  /* Chart */
+  .viz { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 22px; box-shadow: var(--shadow); }
+  .viz h3 { margin: 0 0 2px; font-size: 1.1rem; letter-spacing: -.01em; }
+  .viz .cap { margin: 0 0 12px; color: var(--muted); font-size: .92rem; }
+  .legend { display: flex; flex-wrap: wrap; gap: 6px 18px; margin: 0 0 6px; font-size: .88rem; color: var(--muted); }
+  .legend span { display: inline-flex; align-items: center; gap: 7px; }
+  .key { display: inline-block; width: 18px; height: 2px; border-radius: 2px; }
+  .key.k1 { background: var(--series-1); } .key.k2 { background: var(--series-2); }
+  .key.kb { height: 10px; background: color-mix(in srgb, var(--series-2) 22%, transparent); }
+  .plot { position: relative; }
+  .plot svg { display: block; width: 100%; height: auto; overflow: visible; }
+  .plot text { font: 12px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; fill: var(--muted); font-variant-numeric: tabular-nums; }
+  .plot text.end { fill: var(--fg); font-weight: 700; }
+  .tip { position: absolute; pointer-events: none; min-width: 170px; padding: 10px 12px; border-radius: 10px; background: var(--bg); border: 1px solid var(--border); box-shadow: var(--shadow); font-size: .85rem; color: var(--muted); opacity: 0; transition: opacity .1s ease; }
+  .tip.on { opacity: 1; }
+  .tip .when { font-weight: 700; color: var(--fg); margin-bottom: 4px; }
+  .tip .row { display: flex; align-items: center; gap: 8px; justify-content: space-between; }
+  .tip .row b { color: var(--fg); font-variant-numeric: tabular-nums; }
+  .tip .row span { display: inline-flex; align-items: center; gap: 7px; }
+  details.tbl { margin-top: 12px; color: var(--muted); font-size: .9rem; }
+  details.tbl summary { cursor: pointer; font-weight: 700; }
+  table.data { width: 100%; border-collapse: collapse; font-size: .9rem; margin-top: 10px; }
+  table.data th, table.data td { text-align: right; padding: 7px 10px; border-bottom: 1px solid var(--border); font-variant-numeric: tabular-nums; }
+  table.data th:first-child, table.data td:first-child { text-align: left; }
+  table.data th { color: var(--muted); font-weight: 700; }
+  table.data td { color: var(--fg); }
+  table.cmp { width: 100%; border-collapse: collapse; font-size: .94rem; }
+  table.cmp th, table.cmp td { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  table.cmp th { color: var(--muted); font-weight: 700; }
+  .scroll { overflow-x: auto; }
+  .c-str { color: #ffb14e; } .c-ty { color: #6ee7c8; } .c-kw { color: #c9a5ff; }
+  .lead { max-width: 46ch; }
+</style>
+</head>
+<body>
+<header class="nav">
+  <div class="wrap nav-inner">
+    <div class="brand"><span class="logo">🔭</span> pyforesight</div>
+    <nav class="nav-links">
+      <a class="hide-sm" href="#features">Features</a>
+      <a class="hide-sm" href="#example">Example</a>
+      <a class="hide-sm" href="#how">How it works</a>
+      <a class="hide-sm" href="#install">Install</a>
+      <a class="hide-sm" href="#trust">Checked</a>
+      <a class="btn" href="https://github.com/StrategicProjects/pyforesight">GitHub ↗</a>
+    </nav>
+  </div>
+</header>
+
+<main>
+  <section class="hero">
+    <div class="wrap hero-grid">
+      <div>
+        <span class="eyebrow">◆ Python · time series</span>
+        <h1>Forecasts chosen by <span class="grad">what would have worked</span>.</h1>
+        <p class="lead">A forecasting package that replays the past before trusting a model: rolling-origin backtest, choice by out-of-sample error, and intervals taken from the errors actually observed. The Rust crate <code>foresight</code> inside: fast, on all cores, with no runtime dependencies.</p>
+        <div class="badges">
+          <a href="https://github.com/StrategicProjects/pyforesight/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/StrategicProjects/pyforesight/actions/workflows/ci.yml/badge.svg"></a>
+          <a href="https://github.com/StrategicProjects/pyforesight/blob/main/LICENSE"><img alt="License MIT" src="https://img.shields.io/badge/license-MIT-blue.svg"></a>
+          <img alt="No dependencies" src="https://img.shields.io/badge/dependencies-none-brightgreen.svg">
+        </div>
+        <div class="cta">
+          <a class="btn primary" href="#install">Get started →</a>
+          <a class="btn" href="https://github.com/StrategicProjects/pyforesight">GitHub ★</a>
+        </div>
+      </div>
+      <div class="term" aria-hidden="true">
+        <div class="term-bar"><span class="dot r"></span><span class="dot y"></span><span class="dot g"></span><span class="term-title">forecast.py</span></div>
+<pre><code><span class="c-kw">import</span> foresight <span class="c-kw">as</span> fs
+
+<span class="c-cmt"># monthly revenue, first observation in March</span>
+y = fs.<span class="c-cmd">monthly</span>(values, first_month=<span class="c-flag">3</span>)
+report = fs.<span class="c-cmd">backtest</span>(y)
+
+<span class="c-cmt"># 36 origins · 12 months ahead · 11 models</span>
+<span class="c-ok">mean(log_arima+arima)</span>  MAPE <span class="c-ok">3.43%</span>
+log_linear             MAPE 5.54%
+holt_winters           MAPE 7.29%
+seasonal_naive         MAPE 11.45%</code></pre>
+      </div>
+    </div>
+  </section>
+
+  <section id="features" class="alt">
+    <div class="wrap">
+      <h2>Built to be believed, not just to fit</h2>
+      <p class="sub">A model that fits the past well can still forecast badly. Every choice here is made on forecasts the model gave without seeing the answer.</p>
+      <div class="grid f3">
+        <div class="card"><div class="ic">⏪</div><h3>Rolling-origin backtest</h3><p>Each model is refitted at every origin using only earlier data and forecasts 1 to h periods ahead. Errors are reported by horizon: MAPE, MAE, RMSE, MASE and bias.</p></div>
+        <div class="card"><div class="ic">🎯</div><h3>Choice by out-of-sample error</h3><p>The winner is whatever forecast best, the simple average of the best models included. No information criterion decides what you ship.</p></div>
+        <div class="card"><div class="ic">📏</div><h3>Empirical intervals</h3><p>Intervals are quantiles of the errors seen in the backtest, horizon by horizon. No normality is assumed and none is needed.</p></div>
+        <div class="card"><div class="ic">∑</div><h3>Intervals for totals</h3><p>The total of the next k periods gets its own interval, measured on totals. Adding up monthly limits would overstate the uncertainty of a year.</p></div>
+        <div class="card"><div class="ic">🦀</div><h3>Rust inside</h3><p>The models and the backtest are the Rust crate, compiled into the package: the backtest runs on all cores and releases the GIL. Lists, NumPy arrays and pandas Series go in; pandas comes out on request.</p></div>
+        <div class="card"><div class="ic">🧾</div><h3>Deterministic</h3><p>The same series gives the same numbers, on one core or sixteen. Fitted parameters are exposed by name, ready for an audit trail.</p></div>
+      </div>
+    </div>
+  </section>
+
+  <section id="models">
+    <div class="wrap">
+      <h2>Models</h2>
+      <p class="sub">From the yardsticks every model must beat to the exponential smoothing family, seasonal ARIMA with automatic orders, Prophet with dated events, TBATS for several seasonal periods and Croston for intermittent demand. Models can be combined in an ensemble or run on a series decomposed by STL. Any of them can run on the log or another Box-Cox scale.</p>
+      <div class="pills">
+        <span class="pill">Mean</span><span class="pill">Naive</span><span class="pill">Drift</span><span class="pill">SeasonalNaive</span><span class="pill">Theta</span><span class="pill">HoltWinters</span><span class="pill">LogLinear</span><span class="pill">Arima</span><span class="pill">AutoArima</span><span class="pill">Ets</span><span class="pill">AutoEts</span><span class="pill">Prophet</span><span class="pill">Tbats</span><span class="pill">Croston</span><span class="pill">Stl</span><span class="pill">Mstl</span><span class="pill">Decomposed</span><span class="pill">Ensemble</span><span class="pill">Clean</span><span class="pill">Transformed</span><span class="pill">Regressors</span>
+      </div>
+      <p class="note">The Python package of the Rust crate <a href="https://milkway.github.io/foresight/">foresight</a>. ARIMA is estimated by exact Gaussian maximum likelihood with the innovations algorithm; Prophet is fitted without Stan, its changepoints that do not matter coming out as exactly zero. Any model can be renamed with <code>named()</code> and combined with others in an <code>Ensemble</code>.</p>
+    </div>
+  </section>
+
+  <section id="example" class="alt">
+    <div class="wrap">
+      <h2>On real data</h2>
+      <p class="sub">Monthly ICMS, the sales tax of the Brazilian state of Piauí, from public fiscal reports. The average of two seasonal ARIMA models, on the log and on the original scale, had a mean absolute percentage error of 3.4% over 36 origins and 12 horizons; the seasonal naive forecast had 11.5%.</p>
+      <div class="viz">
+        <h3>ICMS revenue, Piauí: last four years and the next twelve months</h3>
+        <p class="cap">BRL million per month. Forecast from data up to June 2026, with the 80% empirical interval.</p>
+        <div class="legend">
+          <span><i class="key k1"></i>Actual</span>
+          <span><i class="key k2"></i>Forecast</span>
+          <span><i class="key kb"></i>80% interval</span>
+        </div>
+        <div class="plot" id="plot"><div class="tip" id="tip"></div></div>
+        <details class="tbl">
+          <summary>Forecast as a table</summary>
+          <div class="scroll"><table class="data" id="table"><thead><tr><th>Month</th><th>Forecast</th><th>Lower (80%)</th><th>Upper (80%)</th></tr></thead><tbody></tbody></table></div>
+          <p class="note">Total of the next six months: BRL 5.02 billion, 80% interval 4.88 to 5.25 billion. Adding up the six monthly limits instead would give a wider and wrong interval.</p>
+        </details>
+      </div>
+      <p class="note">Source: Siconfi/STN, RREO Anexo 03. The data is in <code>tests/data/</code> of the repository.</p>
+    </div>
+  </section>
+
+  <section id="how">
+    <div class="wrap">
+      <h2>How it works</h2>
+      <p class="sub">One pass over the past produces everything: the ranking, the choice and the intervals.</p>
+      <div class="diagram"><img src="assets/how-it-works.svg" alt="A series and a set of candidate models go through a rolling-origin backtest; the errors give the choice of model and the empirical intervals; the chosen model forecasts from the whole series." loading="lazy" /></div>
+      <div class="steps" style="margin-top:18px">
+        <div class="step"><div class="n">01</div><h4>Describe the series</h4><p>Values and seasonal period. Slices keep season and position.</p></div>
+        <div class="step"><div class="n">02</div><h4>Pick candidates</h4><p>The built-in set, or your own list with your own names.</p></div>
+        <div class="step"><div class="n">03</div><h4>Replay the past</h4><p>Origins, horizon and window are yours to set.</p></div>
+        <div class="step"><div class="n">04</div><h4>Read the report</h4><p>Errors by horizon, the choice, forecasts and intervals.</p></div>
+      </div>
+    </div>
+  </section>
+
+  <section id="install" class="alt">
+    <div class="wrap">
+      <h2>Install &amp; run</h2>
+      <p class="sub">Install, describe the series, run the backtest. Python 3.9 or later; installing from the repository compiles the Rust code and needs a Rust toolchain.</p>
+      <div class="panel" style="margin-bottom:18px">
+<pre><code><span class="c-prompt">$</span> <span class="c-cmd">pip</span> install git+https://github.com/StrategicProjects/pyforesight</code></pre>
+      </div>
+      <div class="grid f2">
+        <div>
+          <div class="panel">
+<pre><code><span class="c-cmt"># choose among every built-in model</span>
+<span class="c-kw">import</span> foresight <span class="c-kw">as</span> fs
+
+y = fs.<span class="c-cmd">monthly</span>(values)
+report = fs.<span class="c-cmd">backtest</span>(y)
+best = report.best
+<span class="c-kw">for</span> p <span class="c-kw">in</span> best.forecast:
+    lo, hi = p.<span class="c-cmd">interval</span>(<span class="c-flag">0.80</span>)
+    <span class="c-cmd">print</span>(p.horizon, p.mean, lo, hi)
+total = best.<span class="c-cmd">cumulative</span>(<span class="c-flag">6</span>)
+report.<span class="c-cmd">to_pandas</span>()</code></pre>
+          </div>
+        </div>
+        <div>
+          <div class="panel">
+<pre><code><span class="c-cmt"># one model on its own</span>
+fit = fs.<span class="c-ty">Theta</span>().<span class="c-cmd">fit</span>(values)
+nxt = fit.<span class="c-cmd">forecast</span>(<span class="c-flag">3</span>)
+
+<span class="c-cmt"># your own settings and your own names</span>
+report = fs.<span class="c-cmd">backtest</span>(y, [
+    fs.<span class="c-ty">SeasonalNaive</span>().<span class="c-cmd">named</span>(<span class="c-str">"same_month"</span>),
+    fs.<span class="c-cmd">log</span>(fs.<span class="c-ty">Arima</span>.<span class="c-cmd">airline</span>()),
+    fs.<span class="c-ty">Ensemble</span>(fs.<span class="c-cmd">defaults</span>(), weighting=<span class="c-str">"stacked"</span>),
+], origins=<span class="c-flag">24</span>, horizon=<span class="c-flag">6</span>, window=<span class="c-flag">60</span>)</code></pre>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="trust">
+    <div class="wrap">
+      <h2>The numbers of the Rust crate</h2>
+      <p class="sub">The package runs the Rust crate, so its numbers are the crate's. The tests check that nothing is lost on the way; the crate in turn is compared with R and reproduced independently in Go.</p>
+      <div class="card scroll">
+        <table class="cmp">
+          <thead><tr><th>Against</th><th>What</th><th>Agreement</th></tr></thead>
+          <tbody>
+            <tr><td>Results recorded by the Rust crate</td><td>ARIMA, regression with ARIMA errors, ETS, Prophet with events, TBATS, STL and MSTL, Croston, cleaning, ensembles, tests of stationarity and seasonality, backtests of 11 and 18 candidates on three public series</td><td>The same numbers, up to the floating point of each platform</td></tr>
+            <tr><td>R, <code>forecast</code> 9.0.2 and <code>prophet</code> 1.1.7</td><td>The crate: benchmarks, Theta, ARIMA, ETS, STL, TBATS, Croston, Prophet</td><td>Benchmarks, STL and Croston exact; ARIMA within 0.01%; the likelihood of ETS and TBATS never worse than R's; Theta within 0.1% and Prophet within 0.5%</td></tr>
+            <tr><td><a href="https://milkway.github.io/foresight-go/">foresight-go</a></td><td>An independent implementation in Go of the same methods</td><td>The same choices; the same numbers within the precision of each search</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="grid f3" style="margin-top:18px">
+        <div class="card"><div class="ic">✅</div><h3>CI on every platform</h3><p>rustfmt · clippy · tests on Linux, macOS and Windows, with Python 3.9 and the current release; type stubs checked against the module.</p></div>
+        <div class="card"><div class="ic">📄</div><h3>From the papers</h3><p>Box &amp; Jenkins, Brockwell &amp; Davis, Hyndman &amp; Khandakar, Taylor &amp; Letham, Assimakopoulos &amp; Nikolopoulos, Guerrero. R supplies reference numbers only.</p></div>
+        <div class="card"><div class="ic">⚖️</div><h3>MIT, nothing attached</h3><p>No runtime dependencies: nothing to reconcile, no supply chain to watch beyond the crate itself.</p></div>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <div class="wrap foot-inner">
+    <div><strong>pyforesight</strong> · MIT-licensed · André Leite, Marcos Wasiliew, Hugo Vasconcelos, Carlos Amorim, Diogo Bezerra</div>
+    <div class="foot-links">
+      <a href="https://github.com/StrategicProjects/pyforesight">Repository</a>
+      <a href="https://milkway.github.io/foresight/">Rust crate</a>
+      <a href="https://milkway.github.io/foresight-go/">Go edition</a>
+      <a href="https://github.com/StrategicProjects/pyforesight/blob/main/LICENSE">License</a>
+    </div>
+  </div>
+</footer>
+
+<script>
+(() => {
+  const DATA = {"actual": [["2022-07", 518.5], ["2022-08", 472.8], ["2022-09", 477.5], ["2022-10", 450.0], ["2022-11", 486.6], ["2022-12", 460.8], ["2023-01", 487.1], ["2023-02", 472.8], ["2023-03", 405.4], ["2023-04", 507.9], ["2023-05", 545.5], ["2023-06", 598.3], ["2023-07", 580.7], ["2023-08", 615.6], ["2023-09", 601.2], ["2023-10", 601.4], ["2023-11", 632.7], ["2023-12", 680.8], ["2024-01", 686.7], ["2024-02", 554.6], ["2024-03", 543.5], ["2024-04", 598.9], ["2024-05", 592.1], ["2024-06", 627.5], ["2024-07", 680.1], ["2024-08", 664.9], ["2024-09", 661.2], ["2024-10", 656.8], ["2024-11", 693.2], ["2024-12", 754.4], ["2025-01", 670.6], ["2025-02", 619.9], ["2025-03", 591.0], ["2025-04", 660.9], ["2025-05", 662.7], ["2025-06", 734.9], ["2025-07", 725.0], ["2025-08", 773.3], ["2025-09", 748.0], ["2025-10", 751.2], ["2025-11", 772.0], ["2025-12", 767.2], ["2026-01", 791.8], ["2026-02", 720.1], ["2026-03", 679.8], ["2026-04", 774.0], ["2026-05", 704.8], ["2026-06", 785.7]], "forecast": [["2026-07", 808.8, 769.5, 851.6], ["2026-08", 820.3, 770.5, 879.0], ["2026-09", 824.3, 785.7, 880.5], ["2026-10", 846.9, 802.2, 907.7], ["2026-11", 845.9, 811.9, 894.4], ["2026-12", 874.5, 831.3, 929.8], ["2027-01", 877.7, 842.0, 941.2], ["2027-02", 788.7, 755.3, 834.1], ["2027-03", 747.9, 723.7, 801.1], ["2027-04", 812.9, 792.0, 858.2], ["2027-05", 782.1, 768.0, 827.9], ["2027-06", 854.2, 838.2, 908.8]]};
+  const NS = "http://www.w3.org/2000/svg";
+  const W = 960, H = 380, M = { top: 16, right: 64, bottom: 34, left: 52 };
+  const plot = document.getElementById("plot"), tip = document.getElementById("tip");
+  const points = DATA.actual.map(([m, v]) => ({ m, actual: v }))
+    .concat(DATA.forecast.map(([m, f, lo, hi]) => ({ m, forecast: f, lo, hi })));
+  const n = points.length, nA = DATA.actual.length;
+  const top = 1000, bottom = 400;
+  const x = i => M.left + (W - M.left - M.right) * i / (n - 1);
+  const y = v => M.top + (H - M.top - M.bottom) * (top - v) / (top - bottom);
+  const el = (name, attrs, parent) => {
+    const e = document.createElementNS(NS, name);
+    for (const k in attrs) e.setAttribute(k, attrs[k]);
+    (parent || svg).appendChild(e);
+    return e;
+  };
+  const svg = document.createElementNS(NS, "svg");
+  svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
+  svg.setAttribute("role", "img");
+  svg.setAttribute("aria-label", "Line chart of monthly ICMS revenue of Piauí from July 2022 to June 2026 and the forecast for the following twelve months with its 80% interval. The values are in the table below the chart.");
+  plot.insertBefore(svg, tip);
+  const month = m => new Date(m + "-15").toLocaleDateString("en", { month: "short", year: "numeric" });
+  const fmt = v => v.toLocaleString("en", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+
+  for (let v = bottom; v <= 1000; v += 200) {
+    el("line", { x1: M.left, x2: W - M.right, y1: y(v), y2: y(v), stroke: v === bottom ? "var(--axis)" : "var(--grid)", "stroke-width": 1 });
+    el("text", { x: M.left - 10, y: y(v) + 4, "text-anchor": "end" }).textContent = v.toLocaleString("en");
+  }
+  points.forEach((p, i) => {
+    if (p.m.endsWith("-01")) el("text", { x: x(i), y: H - 10, "text-anchor": "middle" }).textContent = p.m.slice(0, 4);
+  });
+
+  const line = pts => pts.map(([i, v], k) => `${k ? "L" : "M"}${x(i).toFixed(1)},${y(v).toFixed(1)}`).join("");
+  const fc = DATA.forecast.map(([, f, lo, hi], k) => ({ i: nA + k, f, lo, hi }));
+  const band = "M" + fc.map(p => `${x(p.i).toFixed(1)},${y(p.hi).toFixed(1)}`).join("L")
+    + "L" + fc.slice().reverse().map(p => `${x(p.i).toFixed(1)},${y(p.lo).toFixed(1)}`).join("L") + "Z";
+  el("path", { d: band, fill: "var(--series-2)", "fill-opacity": .14 });
+  const common = { fill: "none", "stroke-width": 2, "stroke-linejoin": "round", "stroke-linecap": "round" };
+  el("path", { d: line(DATA.actual.map(([, v], i) => [i, v])), stroke: "var(--series-1)", ...common });
+  el("path", { d: line([[nA - 1, DATA.actual[nA - 1][1]]].concat(fc.map(p => [p.i, p.f]))), stroke: "var(--series-2)", ...common });
+  const dot = (i, v, color) => el("circle", { cx: x(i), cy: y(v), r: 4, fill: color, stroke: "var(--card)", "stroke-width": 2 });
+  dot(nA - 1, DATA.actual[nA - 1][1], "var(--series-1)");
+  const last = fc[fc.length - 1];
+  dot(last.i, last.f, "var(--series-2)");
+  el("text", { x: x(last.i) + 10, y: y(last.f) + 4, class: "end" }).textContent = fmt(last.f);
+
+  const hair = el("line", { y1: M.top, y2: H - M.bottom, stroke: "var(--axis)", "stroke-width": 1, visibility: "hidden" });
+  const mark = el("circle", { r: 4, stroke: "var(--card)", "stroke-width": 2, visibility: "hidden" });
+  const row = (label, value, cls) => {
+    const r = document.createElement("div"); r.className = "row";
+    const l = document.createElement("span");
+    if (cls) { const k = document.createElement("i"); k.className = "key " + cls; l.appendChild(k); }
+    l.appendChild(document.createTextNode(label));
+    const b = document.createElement("b"); b.textContent = value;
+    r.append(l, b); return r;
+  };
+  const show = i => {
+    const p = points[i], v = p.actual ?? p.forecast;
+    hair.setAttribute("x1", x(i)); hair.setAttribute("x2", x(i)); hair.setAttribute("visibility", "visible");
+    mark.setAttribute("cx", x(i)); mark.setAttribute("cy", y(v));
+    mark.setAttribute("fill", p.actual != null ? "var(--series-1)" : "var(--series-2)");
+    mark.setAttribute("visibility", "visible");
+    tip.replaceChildren();
+    const when = document.createElement("div"); when.className = "when"; when.textContent = month(p.m);
+    tip.appendChild(when);
+    if (p.actual != null) tip.appendChild(row("Actual", fmt(p.actual), "k1"));
+    else {
+      tip.appendChild(row("Forecast", fmt(p.forecast), "k2"));
+      tip.appendChild(row("80% interval", `${fmt(p.lo)} – ${fmt(p.hi)}`, "kb"));
+    }
+    const box = plot.getBoundingClientRect(), px = x(i) / W * box.width;
+    const left = px + 14 + tip.offsetWidth > box.width ? px - 14 - tip.offsetWidth : px + 14;
+    tip.style.left = Math.max(0, left) + "px";
+    tip.style.top = Math.max(0, y(v) / H * box.height - tip.offsetHeight - 10) + "px";
+    tip.classList.add("on");
+  };
+  const hide = () => { tip.classList.remove("on"); hair.setAttribute("visibility", "hidden"); mark.setAttribute("visibility", "hidden"); };
+  let focus = n - 1;
+  const at = e => {
+    const box = svg.getBoundingClientRect();
+    const px = (e.clientX - box.left) / box.width * W;
+    return Math.max(0, Math.min(n - 1, Math.round((px - M.left) / (W - M.left - M.right) * (n - 1))));
+  };
+  svg.addEventListener("pointermove", e => { focus = at(e); show(focus); });
+  svg.addEventListener("pointerleave", hide);
+  svg.setAttribute("tabindex", "0");
+  svg.addEventListener("focus", () => show(focus));
+  svg.addEventListener("blur", hide);
+  svg.addEventListener("keydown", e => {
+    if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
+    e.preventDefault();
+    focus = Math.max(0, Math.min(n - 1, focus + (e.key === "ArrowLeft" ? -1 : 1)));
+    show(focus);
+  });
+
+  const body = document.querySelector("#table tbody");
+  DATA.forecast.forEach(([m, f, lo, hi]) => {
+    const tr = document.createElement("tr");
+    [month(m), fmt(f), fmt(lo), fmt(hi)].forEach(t => {
+      const td = document.createElement("td"); td.textContent = t; tr.appendChild(td);
+    });
+    body.appendChild(tr);
+  });
+})();
+</script>
+</body>
+</html>

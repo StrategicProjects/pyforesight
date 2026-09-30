@@ -1,0 +1,145 @@
+# pyforesight
+
+[![CI](https://github.com/StrategicProjects/pyforesight/actions/workflows/ci.yml/badge.svg)](https://github.com/StrategicProjects/pyforesight/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![Dependencies: none](https://img.shields.io/badge/dependencies-none-brightgreen.svg)](pyproject.toml)
+
+Time series forecasting in Python that picks its model by what would have
+worked.
+
+`foresight` fits several models to a series, replays the past to see how each
+would have done, chooses by out-of-sample error and reports intervals taken
+from the errors actually observed, including intervals for the total of the
+next k periods.
+
+The models, the backtest and the utilities are the Rust crate
+[foresight](https://github.com/milkway/foresight), compiled into the package:
+the numbers are the crate's, the backtest runs on all cores, and nothing else
+is needed at run time. NumPy and pandas are accepted and, for pandas, produced
+on request, but neither is required.
+
+**Website:** <https://strategicprojects.github.io/pyforesight/> ·
+[Português](README.pt-BR.md)
+
+## Install
+
+```bash
+pip install git+https://github.com/StrategicProjects/pyforesight
+```
+
+Python 3.9 or later. Installing from the repository compiles the Rust code,
+so it needs a Rust toolchain (<https://rustup.rs>).
+
+## Use
+
+```python
+import foresight as fs
+
+# monthly data whose first observation is in March
+y = fs.monthly(values, first_month=3)
+
+# replay the last 36 months, 12 months ahead, with every built-in model
+report = fs.backtest(y)
+
+best = report.best
+print(f"{best.name}: MAPE {best.score:.1f}%")
+for p in best.forecast:
+    lo, hi = p.interval(0.80)
+    print(p.horizon, round(p.mean), round(lo), round(hi))
+
+half_year = best.cumulative(6)      # the total of the next six months, with its own interval
+report.to_pandas()                  # one row per candidate (needs pandas)
+best.to_pandas()                    # the forecast with its intervals
+```
+
+One model on its own:
+
+```python
+# seasonal ARIMA on the log scale
+fit = fs.log(fs.Arima.airline()).fit(y)
+next_year = fit.forecast(12)
+
+# orders chosen from the data, inspected
+auto = fs.AutoArima().fit(fs.monthly(log_values, first_month=3))
+auto.details["order"], auto.details["seasonal_order"], auto.aicc
+```
+
+A trend that bends, with dated events:
+
+```python
+model = fs.Prophet(
+    events={"campaign": [10, 34, 58, 82, 106, 130]},  # future ones included
+    steps={"new_law": 80},                              # a lasting change of level
+)
+fit = model.fit(y)
+fit.details["changepoints"], fit.details["effects"]
+```
+
+Several models combined, and the wider set of candidates:
+
+```python
+ensemble = fs.Ensemble(fs.defaults(), weighting="stacked")
+report = fs.backtest(y, fs.thorough() + [ensemble.named("my_ensemble")])
+```
+
+Any sequence of numbers works where a series is expected: a list, a NumPy
+array, a pandas Series. Without `fs.Series` (or `fs.monthly`,
+`fs.quarterly`), pass the seasonal period: `fs.Theta().fit(values, period=12)`.
+Missing values (`None`, NaN) are only accepted by the cleaning functions.
+
+## What is in it
+
+| Piece | What it does |
+|---|---|
+| `Series`, `monthly`, `quarterly` | values + seasonal period + season of the first observation |
+| `Model` / `Fit` | fit once, forecast any horizon, inspect `params`, `details`, likelihood and residuals |
+| Models | `Mean`, `Naive`, `Drift`, `SeasonalNaive`, `Theta`, `HoltWinters`, `LogLinear` (optionally deflated by a price index), `Arima` (seasonal, exact maximum likelihood, optionally with regressors), `AutoArima`, `Ets`, `AutoEts`, `Prophet` (changepoints, Fourier seasonality, dated events and steps), `Tbats` (several seasonal periods, not necessarily whole numbers), `Croston` (with SBA and TSB) |
+| `Transformed`, `log` | any model on the log or another Box-Cox scale, λ fixed or by Guerrero's method |
+| `Decomposed`, `stl`, `mstl` | trend, seasonal patterns and remainder by LOESS; any model on the seasonally adjusted series |
+| `Ensemble` | average, median, weights by inverse error or stacked weights |
+| `Regressors` | external variables, Fourier terms, seasonal dummies |
+| `defaults`, `thorough` | ready sets of 11 and 18 candidates |
+| `backtest` | rolling origin (expanding or fixed window) on all cores; MAPE, MAE, RMSE, MASE and bias by horizon; average of the best models; choice by out-of-sample error; empirical intervals by horizon and for totals |
+| `interpolate`, `outliers`, `clean` | gaps filled and outliers found and replaced, with the season taken into account |
+| Measures and tests | `mape`, `bias`, `mae`, `rmse`, `mase`, `acf`, `difference`, `kpss`, `ndiffs`, `nsdiffs`, `seasonal_strength`, `box_cox`, `inv_box_cox`, `guerrero` |
+
+## How it differs from the usual toolkits
+
+Most forecasting libraries choose a model by an in-sample information
+criterion and derive intervals from distributional assumptions. Here the
+choice and the intervals both come from forecasts made without seeing the
+future they are judged against. The interval for a total (say, the rest of a
+fiscal year) is measured on totals, because adding up monthly limits
+overstates its uncertainty.
+
+## Checked
+
+The package runs the Rust crate, so its numbers are the crate's; the tests
+check that nothing is lost on the way, against results recorded by the crate:
+ARIMA, regression with ARIMA errors, ETS, Prophet, TBATS, STL and MSTL,
+Croston, cleaning, ensembles, tests of stationarity and seasonality, and the
+backtests of 11 and 18 candidates on three public series. The crate itself is
+compared with the R packages `forecast` 9.0.2 and `prophet` 1.1.7, and
+reproduced independently by the Go edition
+[foresight-go](https://github.com/milkway/foresight-go).
+
+```bash
+pip install maturin pytest
+maturin develop --release
+pytest                 # about 30 s; pytest -m "not slow" skips TBATS and the thorough backtest
+```
+
+## Data
+
+`tests/data` has two public series: the monthly ICMS and FPE revenue of the
+state of Piauí, Brazil (Siconfi/STN, with the IPCA price index from the
+Central Bank of Brazil), and the airline passengers of Box & Jenkins.
+
+## Authors
+
+André Leite, Marcos Wasiliew, Hugo Vasconcelos, Carlos Amorim and Diogo
+Bezerra.
+
+## License
+
+MIT.

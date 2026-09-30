@@ -1,0 +1,2 @@
+# the module's __all__ is internal; the package re-exports everything
+foresight._foresight.__all__

@@ -1,0 +1,69 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 300" role="img" aria-label="How foresight works: a series and a set of candidate models go through a rolling-origin backtest; the errors give the choice of model and the empirical intervals; the chosen model forecasts from the whole series.">
+  <style>
+    .box { fill: #ffffff; stroke: #dbe3f4; }
+    .box.key { fill: #f4f1ff; stroke: #c9bcff; }
+    .box.out { fill: #eafaf5; stroke: #a9e6d5; }
+    .lbl { fill: #10192e; font-weight: 700; }
+    .sub { fill: #56648a; }
+    .tag { fill: #56648a; font-weight: 700; letter-spacing: .05em; }
+    .edge { fill: none; stroke: #9aa8cc; stroke-width: 1.6; }
+    .tip { fill: #9aa8cc; }
+    .train { fill: #c9bcff; } .test { fill: #29c7ac; } .rest { fill: #dbe3f4; }
+    @media (prefers-color-scheme: dark) {
+      .box { fill: #16203f; stroke: #2b3a60; }
+      .box.key { fill: #1d1b3f; stroke: #4a3f7f; }
+      .box.out { fill: #123329; stroke: #1f5a49; }
+      .lbl { fill: #e8edf7; } .sub, .tag { fill: #9fb0d0; }
+      .edge { stroke: #46577e; } .tip { fill: #46577e; }
+      .train { fill: #5b4bb5; } .test { fill: #29c7ac; } .rest { fill: #2b3a60; }
+    }
+    text { font-family: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
+  </style>
+  <defs>
+    <marker id="a" markerWidth="8" markerHeight="8" refX="7" refY="3.5" orient="auto" markerUnits="userSpaceOnUse">
+      <path class="tip" d="M0,0 L7,3.5 L0,7 z"/>
+    </marker>
+  </defs>
+
+  <text class="tag" x="24" y="30" font-size="11">1 · INPUT</text>
+  <rect class="box" x="24" y="42" width="190" height="96" rx="12"/>
+  <text class="lbl" x="40" y="70" font-size="13">Series</text>
+  <text class="sub" x="40" y="90" font-size="11">values + seasonal period</text>
+  <text class="sub" x="40" y="108" font-size="11">monthly, quarterly, any</text>
+  <rect class="box" x="24" y="156" width="190" height="112" rx="12"/>
+  <text class="lbl" x="40" y="184" font-size="13">Candidates</text>
+  <text class="sub" x="40" y="204" font-size="11">benchmarks · Theta</text>
+  <text class="sub" x="40" y="222" font-size="11">Holt-Winters · regression</text>
+  <text class="sub" x="40" y="240" font-size="11">and models of your own</text>
+
+  <text class="tag" x="262" y="30" font-size="11">2 · ROLLING-ORIGIN BACKTEST</text>
+  <rect class="box key" x="262" y="42" width="330" height="226" rx="12"/>
+  <text class="lbl" x="280" y="70" font-size="13">Refit at every origin, forecast ahead</text>
+  <g>
+    <rect class="train" x="280" y="90"  width="150" height="14" rx="3"/><rect class="test" x="434" y="90"  width="60" height="14" rx="3"/><rect class="rest" x="498" y="90"  width="76" height="14" rx="3"/>
+    <rect class="train" x="280" y="112" width="174" height="14" rx="3"/><rect class="test" x="458" y="112" width="60" height="14" rx="3"/><rect class="rest" x="522" y="112" width="52" height="14" rx="3"/>
+    <rect class="train" x="280" y="134" width="198" height="14" rx="3"/><rect class="test" x="482" y="134" width="60" height="14" rx="3"/><rect class="rest" x="546" y="134" width="28" height="14" rx="3"/>
+    <rect class="train" x="280" y="156" width="222" height="14" rx="3"/><rect class="test" x="506" y="156" width="60" height="14" rx="3"/>
+  </g>
+  <rect class="train" x="280" y="190" width="12" height="12" rx="3"/><text class="sub" x="298" y="200" font-size="11">seen by the model</text>
+  <rect class="test" x="410" y="190" width="12" height="12" rx="3"/><text class="sub" x="428" y="200" font-size="11">forecast, then compared</text>
+  <text class="sub" x="280" y="228" font-size="11">Errors by horizon: MAPE, MAE, RMSE, MASE, bias.</text>
+  <text class="sub" x="280" y="246" font-size="11">The future is never seen by the model judged on it.</text>
+
+  <text class="tag" x="640" y="30" font-size="11">3 · OUTPUT</text>
+  <rect class="box out" x="640" y="42" width="296" height="64" rx="12"/>
+  <text class="lbl" x="656" y="68" font-size="13">Choice</text>
+  <text class="sub" x="656" y="88" font-size="11">lowest error, averages of the best included</text>
+  <rect class="box out" x="640" y="123" width="296" height="64" rx="12"/>
+  <text class="lbl" x="656" y="149" font-size="13">Empirical intervals</text>
+  <text class="sub" x="656" y="169" font-size="11">quantiles of the errors, by horizon and for totals</text>
+  <rect class="box out" x="640" y="204" width="296" height="64" rx="12"/>
+  <text class="lbl" x="656" y="230" font-size="13">Forecast</text>
+  <text class="sub" x="656" y="250" font-size="11">chosen model fitted on the whole series</text>
+
+  <path class="edge" d="M214,90 H258" marker-end="url(#a)"/>
+  <path class="edge" d="M214,212 H258" marker-end="url(#a)"/>
+  <path class="edge" d="M592,74 H636" marker-end="url(#a)"/>
+  <path class="edge" d="M592,155 H636" marker-end="url(#a)"/>
+  <path class="edge" d="M592,236 H636" marker-end="url(#a)"/>
+</svg>
