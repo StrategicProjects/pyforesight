@@ -169,8 +169,8 @@ Zenodo: <https://doi.org/10.5281/zenodo.23050402> (all versions); see also
 
 ## Authors
 
-André Leite, Marcos Wasiliew, Hugo Vasconcelos, Carlos Amorim and Diogo
-Bezerra.
+André Leite, Marcos Wasiliew, Hugo Vasconcelos, Carlos Amorim, Diogo
+Bezerra and Júlia Nascimento Barreto.
 
 ## License
 
