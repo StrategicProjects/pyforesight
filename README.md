@@ -20,6 +20,8 @@ the numbers are the crate's, the backtest runs on all cores, and nothing else
 is needed at run time. NumPy and pandas are accepted and, for pandas, produced
 on request, but neither is required.
 
+<p align="center"><img src="https://raw.githubusercontent.com/StrategicProjects/pyforesight/main/docs/figures/architecture.svg" alt="Architecture: the Rust crate foresight holds every computation; pyforesight (Python, PyO3) and foresightr (R, extendr) call it; foresight-go is an independent Go port checked against it." width="100%"></p>
+
 **Website:** <https://strategicprojects.github.io/pyforesight/> ·
 [Português](README.pt-BR.md)
 
@@ -108,6 +110,8 @@ Missing values (`None`, NaN) are only accepted by the cleaning functions.
 | Measures and tests | `mape`, `bias`, `mae`, `rmse`, `mase`, `acf`, `difference`, `kpss`, `ndiffs`, `nsdiffs`, `seasonal_strength`, `box_cox`, `inv_box_cox`, `guerrero` |
 
 ## How it differs from the usual toolkits
+
+<p align="center"><img src="https://raw.githubusercontent.com/StrategicProjects/pyforesight/main/docs/figures/backtest.svg" alt="How a model is chosen: every candidate is refitted at each origin and forecasts ahead; the errors by horizon rank the candidates and give the empirical intervals." width="100%"></p>
 
 Most forecasting libraries choose a model by an in-sample information
 criterion and derive intervals from distributional assumptions. Here the

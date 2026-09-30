@@ -230,6 +230,7 @@
       <a class="hide-sm" href="#example">Example</a>
       <a class="hide-sm" href="#how">How it works</a>
       <a class="hide-sm" href="#install">Install</a>
+      <a class="hide-sm" href="#architecture">Architecture</a>
       <a class="hide-sm" href="#trust">Checked</a>
       <a class="btn" href="https://github.com/StrategicProjects/pyforesight">GitHub ↗</a>
     </nav>
@@ -325,7 +326,7 @@ seasonal_naive         MAPE 11.45%</code></pre>
     <div class="wrap">
       <h2>How it works</h2>
       <p class="sub">One pass over the past produces everything: the ranking, the choice and the intervals.</p>
-      <div class="diagram"><img src="assets/how-it-works.svg" alt="A series and a set of candidate models go through a rolling-origin backtest; the errors give the choice of model and the empirical intervals; the chosen model forecasts from the whole series." loading="lazy" /></div>
+      <div class="diagram"><img src="assets/backtest.svg" alt="How a model is chosen: every candidate is refitted at each origin and forecasts 1 to h periods ahead; the errors by horizon rank the candidates, and their quantiles give the intervals, by horizon and for totals." loading="lazy" /></div>
       <div class="steps" style="margin-top:18px">
         <div class="step"><div class="n">01</div><h4>Describe the series</h4><p>Values and seasonal period. Slices keep season and position.</p></div>
         <div class="step"><div class="n">02</div><h4>Pick candidates</h4><p>The built-in set, or your own list with your own names.</p></div>
@@ -376,7 +377,15 @@ report = fs.<span class="c-cmd">backtest</span>(y, [
     </div>
   </section>
 
-  <section id="trust">
+  <section id="architecture">
+    <div class="wrap">
+      <h2>Architecture</h2>
+      <p class="sub">One implementation in Rust. The Python package, the R package and Rust programs call it, so the numbers are the same everywhere; the Go edition is an independent port, checked against it.</p>
+      <div class="diagram"><img src="assets/architecture.svg" alt="The Rust crate foresight holds the models, the backtest, decomposition and cleaning. pyforesight (Python, PyO3), foresightr (R, extendr) and Rust programs call it; foresight-go is an independent Go port checked against results recorded by the crate." loading="lazy" /></div>
+    </div>
+  </section>
+
+  <section id="trust" class="alt">
     <div class="wrap">
       <h2>The numbers of the Rust crate</h2>
       <p class="sub">The package runs the Rust crate, so its numbers are the crate's. The tests check that nothing is lost on the way; the crate in turn is compared with R and reproduced independently in Go.</p>

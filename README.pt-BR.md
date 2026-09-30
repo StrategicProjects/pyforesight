@@ -13,6 +13,8 @@ os números são os do crate, o backtest usa todos os núcleos e nada mais é
 preciso para rodar. Aceita NumPy e pandas, e devolve pandas quando pedido,
 mas nenhum dos dois é obrigatório.
 
+<p align="center"><img src="https://raw.githubusercontent.com/StrategicProjects/pyforesight/main/docs/figures/architecture.svg" alt="Arquitetura do foresight" width="100%"></p>
+
 **Site:** <https://strategicprojects.github.io/pyforesight/>
 
 ## Instalação
