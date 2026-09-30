@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.2
+
+On the crate foresight 0.7.3: `backtest(..., parallel=False)` now also keeps
+ensembles among the candidates on one thread. Results do not change.
+
 ## 0.1.1
 
 On the crate foresight 0.7.2 (see its changelog): a candidate that cannot

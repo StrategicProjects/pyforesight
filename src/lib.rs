@@ -2000,7 +2000,7 @@ fn mase(
 #[pymodule]
 fn _foresight(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add("__version__", env!("CARGO_PKG_VERSION"))?;
-    m.add("CRATE_VERSION", "0.7.2")?;
+    m.add("CRATE_VERSION", "0.7.3")?;
     m.add_class::<Series>()?;
     m.add_class::<Model>()?;
     m.add_class::<Mean>()?;
