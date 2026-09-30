@@ -125,7 +125,8 @@ Croston, cleaning, ensembles, tests of stationarity and seasonality, and the
 backtests of 11 and 18 candidates on three public series. The crate itself is
 compared with the R packages `forecast` 9.0.2 and `prophet` 1.1.7, and
 reproduced independently by the Go edition
-[foresight-go](https://github.com/milkway/foresight-go).
+[foresight-go](https://github.com/milkway/foresight-go). The same methods are
+available in R: [foresightr](https://strategicprojects.github.io/foresightr/).
 
 ```bash
 pip install maturin pytest
