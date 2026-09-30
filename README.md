@@ -16,7 +16,8 @@ next k periods.
 
 The models, the backtest and the utilities are the Rust crate
 [foresight](https://github.com/milkway/foresight), compiled into the package:
-the numbers are the crate's, the backtest runs on all cores, and nothing else
+the numbers are the crate's, the backtest runs on all cores (or as many as
+`fs.set_max_threads` allows), and nothing else
 is needed at run time. NumPy and pandas are accepted and, for pandas, produced
 on request, but neither is required.
 
@@ -132,6 +133,10 @@ choice and the intervals both come from forecasts made without seeing the
 future they are judged against. The interval for a total (say, the rest of a
 fiscal year) is measured on totals, because adding up monthly limits
 overstates its uncertainty.
+
+## Changes
+
+See [CHANGELOG.md](https://github.com/StrategicProjects/pyforesight/blob/main/CHANGELOG.md).
 
 ## Checked
 

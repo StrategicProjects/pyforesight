@@ -282,7 +282,7 @@ seasonal_naive         MAPE 11.45%</code></pre>
         <div class="card"><div class="ic">🎯</div><h3>Choice by out-of-sample error</h3><p>The winner is whatever forecast best, the simple average of the best models included. No information criterion decides what you ship.</p></div>
         <div class="card"><div class="ic">📏</div><h3>Empirical intervals</h3><p>Intervals are quantiles of the errors seen in the backtest, horizon by horizon. No normality is assumed and none is needed.</p></div>
         <div class="card"><div class="ic">∑</div><h3>Intervals for totals</h3><p>The total of the next k periods gets its own interval, measured on totals. Adding up monthly limits would overstate the uncertainty of a year.</p></div>
-        <div class="card"><div class="ic">🦀</div><h3>Rust inside</h3><p>The models and the backtest are the Rust crate, compiled into the package: the backtest runs on all cores and releases the GIL. Lists, NumPy arrays and pandas Series go in; pandas comes out on request.</p></div>
+        <div class="card"><div class="ic">🦀</div><h3>Rust inside</h3><p>The models and the backtest are the Rust crate, compiled into the package: the backtest runs on all cores (or as many as <code>set_max_threads</code> allows) and releases the GIL. Lists, NumPy arrays and pandas Series go in; pandas comes out on request.</p></div>
         <div class="card"><div class="ic">🧾</div><h3>Deterministic</h3><p>The same series gives the same numbers, on one core or sixteen. Fitted parameters are exposed by name, ready for an audit trail.</p></div>
       </div>
     </div>
@@ -339,14 +339,14 @@ seasonal_naive         MAPE 11.45%</code></pre>
   <section id="install" class="alt">
     <div class="wrap">
       <h2>Install &amp; run</h2>
-      <p class="sub">Install, describe the series, run the backtest. Python 3.9 or later; wheels for Linux, macOS and Windows, imported as <code>foresight</code>.</p>
+      <p class="sub">Install, describe the series, run the backtest. Python 3.9 or later; wheels for Linux, macOS and Windows, imported as <code>foresight</code>; changes between versions in the <a href="https://github.com/StrategicProjects/pyforesight/blob/main/CHANGELOG.md">changelog</a>.</p>
       <div class="panel" style="margin-bottom:18px">
 <pre><code><span class="c-prompt">$</span> <span class="c-cmd">pip</span> install pyforesight</code></pre>
       </div>
       <div class="grid f2">
         <div>
           <div class="panel">
-<pre><code><span class="c-cmt"># choose among every built-in model</span>
+<pre><code><span class="c-cmt"># choose among the ready set of candidates</span>
 <span class="c-kw">import</span> foresight <span class="c-kw">as</span> fs
 
 y = fs.<span class="c-cmd">monthly</span>(values)
