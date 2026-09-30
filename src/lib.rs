@@ -1340,18 +1340,25 @@ impl Candidate {
         let f = &self.inner.forecast;
         d.set_item("horizon", f.iter().map(|p| p.horizon).collect::<Vec<_>>())?;
         d.set_item("mean", f.iter().map(|p| p.mean).collect::<Vec<_>>())?;
-        if let Some(first) = f.first() {
-            for (j, i) in first.intervals.iter().enumerate() {
-                let pct = percent(i.level);
-                d.set_item(
-                    format!("lower_{pct}"),
-                    f.iter().map(|p| p.intervals[j].lower).collect::<Vec<_>>(),
-                )?;
-                d.set_item(
-                    format!("upper_{pct}"),
-                    f.iter().map(|p| p.intervals[j].upper).collect::<Vec<_>>(),
-                )?;
+        // a horizon without usable errors has no interval: NaN there
+        let mut levels: Vec<f64> = Vec::new();
+        for i in f.iter().flat_map(|p| &p.intervals) {
+            if !levels.contains(&i.level) {
+                levels.push(i.level);
             }
+        }
+        for level in levels {
+            let pct = percent(level);
+            let bound = |lower: bool| -> Vec<f64> {
+                f.iter()
+                    .map(|p| {
+                        p.interval(level)
+                            .map_or(f64::NAN, |i| if lower { i.lower } else { i.upper })
+                    })
+                    .collect()
+            };
+            d.set_item(format!("lower_{pct}"), bound(true))?;
+            d.set_item(format!("upper_{pct}"), bound(false))?;
         }
         frame(py, &d)
     }

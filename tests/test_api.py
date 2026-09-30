@@ -206,3 +206,17 @@ def test_exact_series():
     assert list(r.best.to_pandas().columns) == [
         "horizon", "mean", "lower_80", "upper_80", "lower_99.5", "upper_99.5",
     ]
+
+
+def test_a_horizon_without_errors_has_no_interval():
+    pd = pytest.importorskip("pandas")
+    y = [5.0] * 60 + [0.0] * 60  # the naive forecast is zero at every origin
+    r = fs.backtest(y, [fs.Naive()], period=12, origins=12, horizon=6, combine=0)
+    frame = r.best.to_pandas()
+    assert list(frame["mean"]) == [0.0] * 6
+    assert r.best.forecast[0].intervals == {}
+    y = [float(v) for v in range(1, 121)]
+    y[107] = 0.0  # one origin forecasts zero for the same season a year later
+    r = fs.backtest(fs.monthly(y), [fs.SeasonalNaive()], origins=12, horizon=12, combine=0)
+    frame = r.best.to_pandas()
+    assert len(frame) == 12 and "lower_80" in frame.columns
